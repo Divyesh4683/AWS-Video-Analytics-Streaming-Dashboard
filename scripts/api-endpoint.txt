@@ -1,0 +1,1 @@
+https://n3r8pu738e.execute-api.us-east-1.amazonaws.com/prod/upload

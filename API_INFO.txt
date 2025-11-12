@@ -1,0 +1,10 @@
+# Video Uploader API
+
+API Endpoint: https://n3r8pu738e.execute-api.us-east-1.amazonaws.com/prod/upload
+API ID: n3r8pu738e
+Lambda Function: mediaqos-uploader
+S3 Bucket: mediaqos-videos-418272773708
+DynamoDB Table: mediaqos-videos
+
+Test Command:
+curl -X POST https://n3r8pu738e.execute-api.us-east-1.amazonaws.com/prod/upload   -H "Content-Type: application/json"   -d '{"filename": "video.mp4", "contentType": "video/mp4"}'

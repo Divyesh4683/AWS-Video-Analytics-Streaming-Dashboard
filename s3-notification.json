@@ -1,0 +1,23 @@
+{
+  "LambdaFunctionConfigurations": [
+    {
+      "Id": "CloudFrontLogProcessor",
+      "LambdaFunctionArn": "arn:aws:lambda:us-east-1:418272773708:function:mediaqos-CloudFrontLogProcessorFunction-tkdEoFPbVgrb",
+      "Events": ["s3:ObjectCreated:*"],
+      "Filter": {
+        "Key": {
+          "FilterRules": [
+            {
+              "Name": "prefix",
+              "Value": "access_logs/cloudfront/"
+            },
+            {
+              "Name": "suffix",
+              "Value": ".gz"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

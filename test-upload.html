@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Upload Test</title>
+</head>
+<body>
+    <h1>MediaQOS Video Upload Test</h1>
+    <button onclick="testUpload()">Test Upload API</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testUpload() {
+            const result = document.getElementById('result');
+            result.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch('https://n3r8pu738e.execute-api.us-east-1.amazonaws.com/prod/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filename: 'test-video.mp4',
+                        contentType: 'video/mp4'
+                    })
+                });
+                
+                const data = await response.json();
+                result.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    result.textContent += '\n\n✅ API is working!';
+                }
+            } catch (error) {
+                result.textContent = '❌ Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
