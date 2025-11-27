@@ -1,13 +1,13 @@
 #!/bin/bash
 
-echo "��� Setting up Video Processor..."
+echo "Setting up Video Processor..."
 
 # Step 1: Create processor directory
 cd /c/dev/asm/lambda
 mkdir -p processor
 cd processor
 
-echo "1️⃣ Creating processor handler..."
+echo "Creating processor handler..."
 
 # Create processor handler (write to file)
 cat > handler.py << 'ENDOFHANDLER'
@@ -72,10 +72,10 @@ def handler(event, context):
                 )
                 
                 processed_count += 1
-                print(f"✅ Processed: {video_id}")
+                print(f"Processed: {video_id}")
                 
         except Exception as e:
-            print(f"❌ Error: {str(e)}")
+            print(f"Error: {str(e)}")
             continue
     
     return {
@@ -114,14 +114,14 @@ def update_video_status(video_id, status, metadata=None):
     )
 ENDOFHANDLER
 
-echo "✅ Handler created"
+echo "Handler created"
 
 # Step 2: Package Lambda
-echo "2️⃣ Packaging Lambda..."
+echo "Packaging Lambda..."
 zip processor.zip handler.py
 
 # Step 3: Deploy Lambda
-echo "3️⃣ Deploying Lambda..."
+echo "Deploying Lambda..."
 aws lambda create-function \
     --function-name mediaqos-processor \
     --runtime python3.11 \
@@ -134,14 +134,14 @@ aws lambda create-function \
     --region us-east-1
 
 if [ $? -eq 0 ]; then
-    echo "✅ Processor Lambda deployed"
+    echo "Processor Lambda deployed"
 else
-    echo "❌ Lambda deployment failed"
+    echo "Lambda deployment failed"
     exit 1
 fi
 
 # Step 4: Connect to SQS
-echo "4️⃣ Connecting Lambda to SQS..."
+echo "Connecting Lambda to SQS..."
 
 QUEUE_ARN=$(cat /c/dev/asm/scripts/queue-arn.txt)
 
@@ -152,17 +152,17 @@ aws lambda create-event-source-mapping \
     --region us-east-1
 
 if [ $? -eq 0 ]; then
-    echo "✅ SQS → Lambda connected"
+    echo "SQS → Lambda connected"
 else
-    echo "❌ Connection failed"
+    echo "Connection failed"
     exit 1
 fi
 
 echo ""
-echo "�� PROCESSOR SERVICE COMPLETE!"
+echo "PROCESSOR SERVICE COMPLETE!"
 echo "============================================"
-echo "✅ Lambda Function: mediaqos-processor"
-echo "✅ Connected to: mediaqos-video-processing-queue"
-echo "✅ Trigger: S3 uploads → SQS → Lambda"
+echo "Lambda Function: mediaqos-processor"
+echo "Connected to: mediaqos-video-processing-queue"
+echo "Trigger: S3 uploads → SQS → Lambda"
 echo "============================================"
 
