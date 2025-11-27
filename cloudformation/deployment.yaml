@@ -1,0 +1,660 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: QoS - Player with event capture, ingest and processing implementation
+
+Mappings:
+  SourceCodeBucket:
+    General:
+      S3Bucket: 'aws-streaming-media-analytics-workshop'
+      LambdaUIDeploymentCodePrefix: 'qos/lambda-functions/ui-deployment'
+      RecentVideoViewAppSyncCodePrefix: 'qos/lambda-functions/recentvideoview-appsync-function'
+      TotalVideoViewAppSyncCodePrefix: 'qos/lambda-functions/totalvideoview-appsync-function'
+      ActiveUserAppSyncCodePrefix: 'qos/lambda-functions/activeuser-appsync-function'
+      CloudfrontLogProcessorCodePrefix: 'qos/lambda-functions/cloudfront-logs-processor-function'
+      FastlyLogProcessorCodePrefix: 'qos/lambda-functions/fastly-logs-processor-function'
+      AddPartitionFunctionCodePrefix: 'qos/lambda-functions/add-partition-function'
+      UICodePrefix: 'user-interfaces'
+      Version: 'oss-v1.1.1'
+
+Parameters:
+  DeployFastlyIntegration:
+    Type: String
+    Description: Deploy integration with fast.ly CDN
+    Default: "No"
+    AllowedValues:
+      - "Yes"
+      - "No"
+
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket that holds your zipped artifacts (dist/*.zip).
+
+  ArtifactPrefix:
+    Type: String
+    Default: dist
+    Description: Prefix/folder inside ArtifactBucket.
+
+  DeployFunctionKey:
+    Type: String
+    Description: dist/deploy-function.zip
+
+  CloudFrontLogsProcessorKey:
+    Type: String
+    Description: dist/cloudfront-logs-processor-function.zip
+
+  FastlyLogsProcessorKey:
+    Type: String
+    Default: ""
+    Description: dist/fastly-logs-processor-function.zip (leave blank if not used)
+
+  RecentVideoViewFunctionKey:
+    Type: String
+
+  TotalVideoViewFunctionKey:
+    Type: String
+
+  ActiveUserFunctionKey:
+    Type: String
+
+  AddPartitionFunctionKey:
+    Type: String
+
+  PlayerUIPackageKey:
+    Type: String
+
+Conditions:
+  DeployFastlyIntegrationCondition: !Equals [!Ref DeployFastlyIntegration, "Yes"]
+
+Resources:
+  # ============== S3 BUCKETS ==============
+  
+  PlayerLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-player-logs-${AWS::AccountId}-${AWS::Region}'
+      AccessControl: LogDeliveryWrite
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  SourceBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - 'GET'
+              - 'PUT'
+              - 'POST'
+              - 'DELETE'
+            AllowedOrigins:
+              - '*'
+            MaxAge: 3000
+            ExposedHeaders:
+              - 'ETAG'
+              - 'x-amz-cf-id'
+
+  S3LogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-logs-${AWS::AccountId}-${AWS::Region}'
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      AccessControl: LogDeliveryWrite
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ============== CLOUDFRONT ==============
+
+  CFOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub '${AWS::StackName} - OAI for player'
+
+  SourceBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    DependsOn:
+      - SourceBucket
+      - CFOriginAccessIdentity
+    Properties:
+      Bucket: !Ref SourceBucket
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${SourceBucket}/*'
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub 'arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CFOriginAccessIdentity}'
+
+  CFDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub '${AWS::StackName} - QoS player'
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: s3-origin
+            DomainName: !GetAtt SourceBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${CFOriginAccessIdentity}'
+        DefaultCacheBehavior:
+          TargetOriginId: s3-origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+        Logging:
+          Bucket: !GetAtt S3LogsBucket.DomainName
+          IncludeCookies: false
+          Prefix: 'access_logs/cloudfront/'
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        HttpVersion: http2
+        IPV6Enabled: true
+
+  # ============== GLUE DATABASE & TABLES ==============
+
+  GlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Sub '${AWS::StackName}_qos_db'
+
+  CDNLogsTable:
+    DependsOn: GlueDatabase
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref GlueDatabase
+      TableInput:
+        Name: 'cdn_logs'
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: json
+        PartitionKeys:
+          - Name: year
+            Type: string
+          - Name: month
+            Type: string
+          - Name: day
+            Type: string
+          - Name: hour
+            Type: string
+        StorageDescriptor:
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          Columns:
+            - Name: logdate
+              Type: date
+            - Name: logtime
+              Type: string
+            - Name: location
+              Type: string
+            - Name: bytes
+              Type: bigint
+            - Name: requestip
+              Type: string
+            - Name: method
+              Type: string
+            - Name: host
+              Type: string
+            - Name: uri
+              Type: string
+            - Name: status
+              Type: bigint
+            - Name: referrer
+              Type: string
+            - Name: useragent
+              Type: string
+            - Name: uriquery
+              Type: string
+            - Name: cookie
+              Type: string
+            - Name: resulttype
+              Type: string
+            - Name: requestid
+              Type: string
+            - Name: header
+              Type: string
+            - Name: csprotocol
+              Type: string
+            - Name: csbytes
+              Type: string
+            - Name: timetaken
+              Type: bigint
+            - Name: forwardedfor
+              Type: string
+            - Name: sslprotocol
+              Type: string
+            - Name: sslcipher
+              Type: string
+            - Name: responseresulttype
+              Type: string
+            - Name: protocolversion
+              Type: string
+            - Name: fle-status
+              Type: string
+            - Name: fle-encrypted-fields
+              Type: string
+            - Name: browserfamily
+              Type: string
+            - Name: osfamily
+              Type: string
+            - Name: isbot
+              Type: string
+            - Name: filename
+              Type: string
+            - Name: distribution
+              Type: string
+            - Name: cdn_source
+              Type: string
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          Location: !Join ['', ['s3://', !Ref PlayerLogsBucket, '/cdn_logs/']]
+          SerdeInfo:
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+
+  PlayerLogsTable:
+    DependsOn: GlueDatabase
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref GlueDatabase
+      TableInput:
+        Name: 'player_logs'
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: json
+        PartitionKeys:
+          - Name: year
+            Type: string
+          - Name: month
+            Type: string
+          - Name: day
+            Type: string
+          - Name: hour
+            Type: string
+        StorageDescriptor:
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          Columns:
+            - Name: MetricType
+              Type: string
+            - Name: user_id
+              Type: string
+            - Name: video_id
+              Type: string
+            - Name: at
+              Type: double
+            - Name: timestamp
+              Type: bigint
+            - Name: playlist_type
+              Type: string
+            - Name: time_millisecond
+              Type: double
+            - Name: duration
+              Type: double
+            - Name: buffer_type
+              Type: string
+            - Name: direction
+              Type: string
+            - Name: package
+              Type: string
+            - Name: resolution
+              Type: string
+            - Name: fps
+              Type: double
+            - Name: bitrate_from
+              Type: int
+            - Name: bitrate_to
+              Type: int
+            - Name: rtt
+              Type: int
+            - Name: avg_bitrate
+              Type: int
+            - Name: cdn_tracking_id
+              Type: string
+            - Name: message
+              Type: string
+            - Name: seek_from
+              Type: double
+            - Name: seek_to
+              Type: double
+            - Name: connection_type
+              Type: string
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          Location: !Join ['', ['s3://', !Ref PlayerLogsBucket, '/player_logs/']]
+          SerdeInfo:
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+
+  WatchTimeLogsTable:
+    DependsOn: GlueDatabase
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref GlueDatabase
+      TableInput:
+        Name: 'watch_time_logs'
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          typeOfData: file
+          compressionType: none
+        PartitionKeys:
+          - Name: partition_key
+            Type: string
+        StorageDescriptor:
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          Columns:
+            - Name: MetricType
+              Type: string
+            - Name: user_id
+              Type: string
+            - Name: video_id
+              Type: string
+            - Name: at
+              Type: double
+            - Name: TimeStamp
+              Type: bigint
+            - Name: duration
+              Type: int
+            - Name: year
+              Type: string
+            - Name: month
+              Type: string
+            - Name: day
+              Type: string
+            - Name: watch_percent
+              Type: double
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          Location: !Join ['', ['s3://', !Ref PlayerLogsBucket, '/watch_time_processed/']]
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+
+  # ============== IAM ROLES ==============
+
+  LogProcessorFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+                - "s3.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/service-role/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: "CustomPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource: !Sub arn:aws:s3:::${AWS::StackName}-logs-${AWS::AccountId}-${AWS::Region}/*
+              - Effect: Allow
+                Action:
+                  - firehose:*
+                Resource: !Sub arn:aws:firehose:${AWS::Region}:${AWS::AccountId}:deliverystream/${AWS::StackName}-cdnlogs-stream
+
+  # ============== LAMBDA FUNCTIONS ==============
+
+  CloudFrontLogProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LogProcessorFunctionRole.Arn
+      Runtime: python3.11
+      Handler: prep-data.lambda_handler
+      MemorySize: 128
+      Timeout: 300
+      Environment:
+        Variables:
+          KINESIS_FIREHOSE_STREAM: !Sub '${AWS::StackName}-cdnlogs-stream'
+          CDN_SOURCE: cloudfront
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/${CloudFrontLogsProcessorKey}'
+      Tags:
+        - Key: lambda:createdBy
+          Value: SAM
+
+  CloudFrontLogProcessorFunctionPerm:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn: CloudFrontLogProcessorFunction
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref CloudFrontLogProcessorFunction
+      Principal: 's3.amazonaws.com'
+      SourceArn: !GetAtt PlayerLogsBucket.Arn
+      SourceAccount: !Ref AWS::AccountId
+
+  CloudFrontLogProcessorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt CloudFrontLogProcessorFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt PlayerLogsBucket.Arn
+
+  FastlyLogProcessorFunction:
+    Type: AWS::Lambda::Function
+    Condition: DeployFastlyIntegrationCondition
+    Properties:
+      Role: !GetAtt LogProcessorFunctionRole.Arn
+      Runtime: python3.13
+      Handler: prep-data.lambda_handler
+      MemorySize: 128
+      Timeout: 300
+      Environment:
+        Variables:
+          KINESIS_FIREHOSE_STREAM: !Sub '${AWS::StackName}-cdnlogs-stream'
+          CDN_SOURCE: fastly
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/${FastlyLogsProcessorKey}'
+      Tags:
+        - Key: lambda:createdBy
+          Value: SAM
+
+  FastlyLogProcessorFunctionPerm:
+    Type: 'AWS::Lambda::Permission'
+    Condition: DeployFastlyIntegrationCondition
+    DependsOn: FastlyLogProcessorFunction
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref FastlyLogProcessorFunction
+      Principal: 's3.amazonaws.com'
+      SourceArn: !GetAtt PlayerLogsBucket.Arn
+      SourceAccount: !Ref AWS::AccountId
+
+  FastlyLogProcessorPermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployFastlyIntegrationCondition
+    Properties:
+      FunctionName: !GetAtt FastlyLogProcessorFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt PlayerLogsBucket.Arn
+
+  RecentVideoViewAppSyncFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LogProcessorFunctionRole.Arn
+      Runtime: python3.13
+      Handler: index.lambda_handler
+      Timeout: 60
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/${RecentVideoViewFunctionKey}'
+      Tags:
+        - Key: lambda:createdBy
+          Value: SAM
+
+  TotalVideoViewAppSyncFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LogProcessorFunctionRole.Arn
+      Runtime: python3.13
+      Handler: index.lambda_handler
+      Timeout: 60
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/${TotalVideoViewFunctionKey}'
+      Tags:
+        - Key: lambda:createdBy
+          Value: SAM
+
+  ActiveUserAppSyncFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LogProcessorFunctionRole.Arn
+      Runtime: python3.13
+      Handler: index.lambda_handler
+      Timeout: 60
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/${ActiveUserFunctionKey}'
+      Tags:
+        - Key: lambda:createdBy
+          Value: SAM
+
+  AddPartitionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LogProcessorFunctionRole.Arn
+      Runtime: python3.13
+      Handler: add_partition.handler
+      Timeout: 300
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/${AddPartitionFunctionKey}'
+      Tags:
+        - Key: lambda:createdBy
+          Value: SAM
+
+  DeployFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LogProcessorFunctionRole.Arn
+      Runtime: python3.13
+      Handler: index.lambda_handler
+      Timeout: 60
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/${DeployFunctionKey}'
+      Tags:
+        - Key: lambda:createdBy
+          Value: SAM
+
+  # ============== KINESIS FIREHOSE ==============
+
+  DeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Ref 'AWS::AccountId'
+
+  DeliveryPolicy:
+    Type: AWS::IAM::Policy
+    DependsOn: DeliveryRole
+    Properties:
+      PolicyName: firehose_delivery_policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:AbortMultipartUpload'
+              - 's3:GetBucketLocation'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:PutObject'
+            Resource:
+              - !Sub 'arn:aws:s3:::${PlayerLogsBucket}'
+              - !Sub 'arn:aws:s3:::${PlayerLogsBucket}/*'
+      Roles:
+        - !Ref DeliveryRole
+
+  PlayerLogsDeliveryStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    DependsOn:
+      - PlayerLogsBucket
+      - DeliveryRole
+    Properties:
+      DeliveryStreamType: DirectPut
+      DeliveryStreamName: !Sub '${AWS::StackName}-playerlogs-stream'
+      S3DestinationConfiguration:
+        BucketARN: !Sub 'arn:aws:s3:::${PlayerLogsBucket}'
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 1
+        CompressionFormat: UNCOMPRESSED
+        Prefix: player_logs/
+        RoleARN: !GetAtt DeliveryRole.Arn
+        CloudWatchLoggingOptions:
+          Enabled: true
+          LogGroupName: "deliverystream"
+          LogStreamName: "playerlogstream"
+
+  CDNLogsDeliveryStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    DependsOn:
+      - PlayerLogsBucket
+      - DeliveryRole
+    Properties:
+      DeliveryStreamType: DirectPut
+      DeliveryStreamName: !Sub '${AWS::StackName}-cdnlogs-stream'
+      S3DestinationConfiguration:
+        BucketARN: !Sub arn:aws:s3:::${PlayerLogsBucket}
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 1
+        CompressionFormat: UNCOMPRESSED
+        Prefix: cdn_logs/
+        RoleARN: !GetAtt DeliveryRole.Arn
+        CloudWatchLoggingOptions:
+          Enabled: true
+          LogGroupName: "deliverystream"
+          LogStreamName: "cflogstream"
+
+Outputs:
+  PlayerURL:
+    Value: !Sub 'https://${CFDistribution.DomainName}/ui/index.html'
