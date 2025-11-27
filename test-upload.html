@@ -29,10 +29,10 @@
                 result.textContent = JSON.stringify(data, null, 2);
                 
                 if (data.success) {
-                    result.textContent += '\n\n✅ API is working!';
+                    result.textContent += '\nAPI is working!';
                 }
             } catch (error) {
-                result.textContent = '❌ Error: ' + error.message;
+                result.textContent = 'Error: ' + error.message;
             }
         }
     </script>

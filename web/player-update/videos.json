@@ -1,6 +1,6 @@
 [
-  {"url":"/sample-videos/hls/BigBuckBunny.m3u8"},
-  {"url":"/sample-videos/hls/TearsOfSteel.m3u8"},
-  {"url":"/sample-videos/hls/oceans.m3u8"},
-  {"url":"/sample-videos/dash/oceans.mpd"}
+  { "id": "1", "title": "HD Video 1920x1080 30fps", "url": "/ui/sample-videos/4990233-hd_1920_1080_30fps.mp4" },
+  { "id": "2", "title": "HD Video 1920x1080 25fps", "url": "/ui/sample-videos/6963744-hd_1920_1080_25fps.mp4" },
+  { "id": "3", "title": "UHD Video 3840x2160 24fps", "url": "/ui/sample-videos/7140928-uhd_3840_2160_24fps.mp4" },
+  { "id": "4", "title": "UHD Video 3840x2160 25fps", "url": "/ui/sample-videos/3129957-uhd_3840_2160_25fps.mp4" }
 ]

@@ -1,2 +1,250 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name="theme-color" content="#000000"><link rel="manifest" href="./manifest.json"><link rel="shortcut icon" href="https://a0.awsstatic.com/main/images/site/favicon.ico"><title>Player</title><link href="./static/css/main.dcbe1d81.chunk.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div><script>!function(l){function e(e){for(var r,t,n=e[0],o=e[1],u=e[2],f=0,i=[];f<n.length;f++)t=n[f],p[t]&&i.push(p[t][0]),p[t]=0;for(r in o)Object.prototype.hasOwnProperty.call(o,r)&&(l[r]=o[r]);for(s&&s(e);i.length;)i.shift()();return c.push.apply(c,u||[]),a()}function a(){for(var e,r=0;r<c.length;r++){for(var t=c[r],n=!0,o=1;o<t.length;o++){var u=t[o];0!==p[u]&&(n=!1)}n&&(c.splice(r--,1),e=f(f.s=t[0]))}return e}var t={},p={2:0},c=[];function f(e){if(t[e])return t[e].exports;var r=t[e]={i:e,l:!1,exports:{}};return l[e].call(r.exports,r,r.exports,f),r.l=!0,r.exports}f.m=l,f.c=t,f.d=function(e,r,t){f.o(e,r)||Object.defineProperty(e,r,{enumerable:!0,get:t})},f.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},f.t=function(r,e){if(1&e&&(r=f(r)),8&e)return r;if(4&e&&"object"==typeof r&&r&&r.__esModule)return r;var t=Object.create(null);if(f.r(t),Object.defineProperty(t,"default",{enumerable:!0,value:r}),2&e&&"string"!=typeof r)for(var n in r)f.d(t,n,function(e){return r[e]}.bind(null,n));return t},f.n=function(e){var r=e&&e.__esModule?function(){return e.default}:function(){return e};return f.d(r,"a",r),r},f.o=function(e,r){return Object.prototype.hasOwnProperty.call(e,r)},f.p="./";var r=window.webpackJsonp=window.webpackJsonp||[],n=r.push.bind(r);r.push=e,r=r.slice();for(var o=0;o<r.length;o++)e(r[o]);var s=n;a()}([])</script><script src="./static/js/1.9edbc364.chunk.js"></script><script src="./static/js/main.08aff79d.chunk.js"></script><script src="/analytics-integration.js"></script>
-<div id="popular-videos"><div id="video-stats"></div></div></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="https://a0.awsstatic.com/main/images/site/favicon.ico">
+    <title>AWS Media Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .left-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .right-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        h1 {
+            font-size: 24px;
+            margin: 0 0 20px 0;
+        }
+        video {
+            width: 100%;
+            border-radius: 8px;
+            background: #000;
+        }
+        .control-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 10px 20px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .pause-btn {
+            background: #f44336;
+        }
+        .pause-btn:hover {
+            background: #da190b;
+        }
+        .widget-section {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .widget-section:last-child {
+            border-bottom: none;
+        }
+        .widget-title {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+        }
+        .sample-videos-section {
+            margin-top: 20px;
+        }
+        .sample-videos-header {
+            padding: 10px;
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+        .sample-videos-list {
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            background: white;
+        }
+        .video-url-item {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            font-size: 13px;
+            color: #0066cc;
+            transition: background 0.2s;
+        }
+        .video-url-item:hover {
+            background: #f0f0f0;
+        }
+        .video-url-item:last-child {
+            border-bottom: none;
+        }
+        .collapsed {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left Section: Video Player -->
+        <div class="left-section">
+            <h1>AWS Video Analytics & Streaminmg Dashboard</h1>
+            
+            <video id="video-player" controls>
+                <source src="https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/4990233-hd_1920_1080_30fps.mp4" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+
+            <div class="control-group">
+                <label>URL:</label>
+                <input type="text" id="video-url" value="">
+            </div>
+
+            <div class="control-group">
+                <button id="play-btn" onclick="playVideo()">PLAY</button>
+                <button id="pause-btn" class="pause-btn" onclick="pauseVideo()">PAUSE</button>
+            </div>
+
+            <!-- Sample Videos Section -->
+            <div class="sample-videos-section">
+                <div class="sample-videos-header" onclick="toggleSampleVideos()">
+                    <span>Sample Videos</span>
+                    <span id="toggle-icon">▲</span>
+                </div>
+                <div class="sample-videos-list" id="sample-videos-list">
+                    <div class="video-url-item" onclick="loadUrl('https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/4990233-hd_1920_1080_30fps.mp4')">
+                        https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/4990233-hd_1920_1080_30fps.mp4
+                    </div>
+                    <div class="video-url-item" onclick="loadUrl('https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/6963744-hd_1920_1080_25fps.mp4')">
+                        https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/6963744-hd_1920_1080_25fps.mp4
+                    </div>
+                    <div class="video-url-item" onclick="loadUrl('https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/7140928-uhd_3840_2160_24fps.mp4')">
+                        https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/7140928-uhd_3840_2160_24fps.mp4
+                    </div>
+                    <div class="video-url-item" onclick="loadUrl('https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/3129957-uhd_3840_2160_25fps.mp4')">
+                        https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos/3129957-uhd_3840_2160_25fps.mp4
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Section: Analytics Widgets -->
+        <div class="right-section">
+            <!-- Active Users -->
+            <div class="widget-section">
+                <div class="widget-title">Active Users</div>
+                <div class="metric-value" id="active-users-display">0</div>
+            </div>
+
+            <!-- Popular Videos -->
+            <div class="widget-section">
+                <div class="widget-title">Popular Videos (total views)</div>
+                <div id="popular-videos-display">Loading...</div>
+            </div>
+
+            <!-- Metrics Captured -->
+            <div class="widget-section">
+                <div class="widget-title">Metrics Captured</div>
+                <div id="metrics-display">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player Controls Script -->
+    <script>
+        const video = document.getElementById('video-player');
+        const urlInput = document.getElementById('video-url');
+
+        function playVideo() {
+            video.play();
+        }
+
+        function pauseVideo() {
+            video.pause();
+        }
+
+        function loadUrl(url) {
+            urlInput.value = url;
+            video.src = url;
+            video.load();
+            video.play();
+        }
+
+        function toggleSampleVideos() {
+            const list = document.getElementById('sample-videos-list');
+            const icon = document.getElementById('toggle-icon');
+            list.classList.toggle('collapsed');
+            icon.textContent = list.classList.contains('collapsed') ? '▼' : '▲';
+        }
+
+        // Sync URL input with video source
+        urlInput.addEventListener('change', function() {
+            video.src = this.value;
+            video.load();
+        });
+
+        // Set initial URL
+        urlInput.value = video.src;
+
+        // Global function for dashboard to load videos
+        window.loadVideo = function(videoId) {
+            const baseUrl = 'https://d3nqf2zvn4fyfl.cloudfront.net/ui/sample-videos';
+            const url = `${baseUrl}/${videoId}-hd_1920_1080_30fps.mp4`;
+            loadUrl(url);
+        };
+    </script>
+
+    <!-- Analytics Scripts -->
+    <script src="./static/js/1.9edbc364.chunk.js"></script>
+    <script src="./static/js/main.08aff79d.chunk.js"></script>
+    <script src="analytics-dashboard.js"></script>
+    <script src="real-time-analytics.js"></script>
+</body>
+</html>

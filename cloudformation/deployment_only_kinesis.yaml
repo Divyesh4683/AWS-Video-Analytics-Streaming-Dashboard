@@ -1,20 +1,22 @@
 AWSTemplateFormatVersion: "2010-09-09"
+
 Transform: AWS::Serverless-2016-10-31
+
 Description: QoS - Player with event capture, ingest and processing implementation
 
 Mappings:
-    SourceCodeBucket:
-      General:
-        S3Bucket: 'ganeshji-codedeployus'
-        LambdaUIDeploymentCodePrefix: 'qos/lambda-functions/ui-deployment'
-        RecentVideoViewAppSyncCodePrefix: 'qos/lambda-functions/recentvideoview-appsync-function'
-        TotalVideoViewAppSyncCodePrefix: 'qos/lambda-functions/totalvideoview-appsync-function'
-        ActiveUserAppSyncCodePrefix: 'qos/lambda-functions/activeuser-appsync-function'
-        CloudfrontLogProcessorCodePrefix: 'qos/lambda-functions/cloudfront-logs-processor-function'
-        FastlyLogProcessorCodePrefix: 'qos/lambda-functions/fastly-logs-processor-function'
-        AddPartitionFunctionCodePrefix: 'qos/lambda-functions/add-partition-function'
-        UICodePrefix: 'user-interfaces'
-        Version: 'v1'
+  SourceCodeBucket:
+    General:
+      S3Bucket: 'mediaqos-artifacts-1762723357'
+      LambdaUIDeploymentCodePrefix: 'dist'
+      RecentVideoViewAppSyncCodePrefix: 'dist'
+      TotalVideoViewAppSyncCodePrefix: 'dist'
+      ActiveUserAppSyncCodePrefix: 'dist'
+      CloudfrontLogProcessorCodePrefix: 'dist'
+      FastlyLogProcessorCodePrefix: 'dist'
+      AddPartitionFunctionCodePrefix: 'dist'
+      UICodePrefix: 'dist'
+      Version: ''
 
 Resources:
   SourceBucket:
@@ -24,8 +26,7 @@ Resources:
         Status: Enabled
       CorsConfiguration:
         CorsRules:
-          -
-            AllowedHeaders:
+          - AllowedHeaders:
               - '*'
             AllowedMethods:
               - 'GET'
@@ -44,6 +45,7 @@ Resources:
     DependsOn:
       - SourceBucket
     Properties:
+      Bucket: !Ref SourceBucket
       PolicyDocument:
         Statement:
           - Action:
@@ -51,15 +53,41 @@ Resources:
             Resource: !Sub 'arn:aws:s3:::${SourceBucket}/*'
             Effect: Allow
             Principal:
-              AWS:
-              - !Sub 'arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CFOriginAccessIdentity}'
-      Bucket: !Ref SourceBucket
+              CanonicalUser: !GetAtt CFOriginAccessIdentity.S3CanonicalUserId
 
   CFOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
     Properties:
       CloudFrontOriginAccessIdentityConfig:
-        Comment: !Sub "${AWS::StackName} - QoS - OAI for player"
+        Comment: !Sub "$${AWS::StackName} - QoS - OAI for player"
+
+  PlayerLogsBucket:
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - CloudFrontLogProcessorFunction
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-logs-${AWS::AccountId}-${AWS::Region}
+      VersioningConfiguration:
+        Status: Enabled
+      # ADD THIS SECTION FOR CLOUDFRONT LOGGING
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      # END OF ADDED SECTION
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Function: !GetAtt CloudFrontLogProcessorFunction.Arn
+            Event: "s3:ObjectCreated:*"
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: 'access_logs/cloudfront/'
 
   CFDistribution:
     Type: 'AWS::CloudFront::Distribution'
@@ -68,35 +96,35 @@ Resources:
     Properties:
       DistributionConfig:
         Origins:
-        - DomainName: !Sub ${SourceBucket}.s3-${AWS::Region}.amazonaws.com
-          Id: myS3Origin
-          S3OriginConfig:
-            OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CFOriginAccessIdentity}
+          - DomainName: !GetAtt SourceBucket.RegionalDomainName
+            Id: myS3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CFOriginAccessIdentity}
         Enabled: 'true'
         Comment: !Sub "${AWS::StackName} - distribution for vod website"
         DefaultRootObject: index.html
         DefaultCacheBehavior:
           TargetOriginId: myS3Origin
           ViewerProtocolPolicy: allow-all
-          MinTTL: '300'
-          MaxTTL: '86400'
-          DefaultTTL: '86400'
-          SmoothStreaming: 'false'
-          Compress: 'true'
+          MinTTL: 300
+          MaxTTL: 86400
+          DefaultTTL: 86400
+          SmoothStreaming: false
+          Compress: true
           ForwardedValues:
-            QueryString: 'false'
+            QueryString: false
             Cookies:
-              Forward: 'none'
+              Forward: none
             Headers:
-              - 'Access-Control-Request-Headers'
-              - 'Access-Control-Request-Method'
-              - 'Origin'
+              - Access-Control-Request-Headers
+              - Access-Control-Request-Method
+              - Origin
         PriceClass: PriceClass_All
         ViewerCertificate:
-          CloudFrontDefaultCertificate: 'true'
-        Logging:
-          Bucket: !GetAtt PlayerLogsBucket.DomainName
-          Prefix: 'access_logs/cloudfront/'
+          CloudFrontDefaultCertificate: true
+        #Logging:
+          #Bucket: !GetAtt PlayerLogsBucket.DomainName
+          #Prefix: 'access_logs/cloudfront/'
 
   GlueRole:
     Type: AWS::IAM::Role
@@ -271,13 +299,13 @@ Resources:
     Type: AWS::Serverless::Function
     DependsOn: CloudFrontLogProcessorFunctionRole
     Properties:
-      Runtime: python2.7
+      Runtime: python3.11
       Handler: prep-data.lambda_handler
       MemorySize: 128
       Timeout: 300
       CodeUri:
-        Bucket: !Join ["-", [!FindInMap [SourceCodeBucket, General, S3Bucket], !Ref "AWS::Region"]]
-        Key: !Join ["/",[!FindInMap [SourceCodeBucket, General, CloudfrontLogProcessorCodePrefix],!FindInMap [SourceCodeBucket, General, Version],"cloudfront-logs-processor-function.zip"]]
+        Bucket: !FindInMap [SourceCodeBucket, General, S3Bucket]
+        Key: "dist/cloudfront-logs-processor-function.zip"
       Environment:
         Variables:
           KINESIS_FIREHOSE_STREAM: !Sub '${AWS::StackName}-cdnlogs-stream'
@@ -288,13 +316,13 @@ Resources:
     Type: AWS::Serverless::Function
     DependsOn: CloudFrontLogProcessorFunctionRole
     Properties:
-      Runtime: python2.7
+      Runtime: python3.11
       Handler: prep-data.lambda_handler
       MemorySize: 128
       Timeout: 300
       CodeUri:
-        Bucket: !Join ["-", [!FindInMap [SourceCodeBucket, General, S3Bucket], !Ref "AWS::Region"]]
-        Key: !Join ["/",[!FindInMap [SourceCodeBucket, General, FastlyLogProcessorCodePrefix],!FindInMap [SourceCodeBucket, General, Version],"fastly-logs-processor-function.zip"]]
+        Bucket: !FindInMap [SourceCodeBucket, General, S3Bucket]
+        Key: "dist/fastly-logs-processor-function.zip"
       Environment:
         Variables:
           KINESIS_FIREHOSE_STREAM: !Sub '${AWS::StackName}-cdnlogs-stream'
@@ -430,84 +458,84 @@ Resources:
                 Action: "*"
                 Resource: "*"
 
-  RealtimeAnalytics:
-    Type: AWS::KinesisAnalytics::Application
-    DependsOn:
-      - KinesisAnalyticsRole
-      - PlayerLogsDeliveryStream
-    Properties:
-      ApplicationName: !Sub '${AWS::StackName}-qos-realtimeapp'
-      ApplicationDescription: "QoS Realtime Application"
-      ApplicationCode: "-- CURRENT ACTIVE USERS\nCREATE OR REPLACE STREAM ACTIVE_USERS (TYPE VARCHAR(50), USER_COUNT integer);\n\nCREATE OR REPLACE PUMP \"STREAM_PUMP4\" AS INSERT INTO \"ACTIVE_USERS\" \nSELECT STREAM 'ACTIVE_USERS_1MIN', count(DISTINCT \"user_id\") OVER SLIDING_WINDOW AS LAST_2MIN_SLIDING FROM \"SOURCE_SQL_STREAM_001\" \nWHERE \"MetricType\" = 'STREAM' \nWINDOW SLIDING_WINDOW AS\n( PARTITION BY \"MetricType\" RANGE INTERVAL '2' MINUTE PRECEDING);\n\n--TOTAL VIDEO VIEWS IN TUMBLING WINDOW\nCREATE OR REPLACE STREAM AGGREGATE_VIEWS (VIDEOID VARCHAR(20), VIEWS integer);\n\nCREATE OR REPLACE PUMP STREAM_PUMP2 AS \nINSERT INTO AGGREGATE_VIEWS  \nSELECT STREAM \"video_id\", COUNT(1)\n  FROM (\n    SELECT STREAM DISTINCT rowtime as window_time, \n      \"video_id\",\"user_id\",   \n      STEP((SOURCE_SQL_STREAM_001.rowtime) BY INTERVAL '1' MINUTE) \n      FROM SOURCE_SQL_STREAM_001 WHERE \"MetricType\" = 'PLAY') as distinct_stream \n  GROUP BY \"video_id\", \n      STEP((distinct_stream.window_time) BY INTERVAL '1' MINUTE);\n\n--RECENT VIDEO VIEWS IN SLIDING WINDOW\n\nCREATE OR REPLACE STREAM RECENT_VIEWS (VIDEOID VARCHAR(20), VIEWS integer);\n\nCREATE OR REPLACE PUMP \"STREAM_PUMP1\" AS INSERT INTO \"RECENT_VIEWS\" \nSELECT STREAM \"video_id\", count(*) OVER SLIDING_WINDOW FROM \"SOURCE_SQL_STREAM_001\"\nWHERE \"MetricType\" = 'PLAY' \nWINDOW SLIDING_WINDOW AS \n( PARTITION BY \"video_id\" RANGE INTERVAL '2' MINUTE PRECEDING);\n"
-      Inputs:
-        - NamePrefix: "SOURCE_SQL_STREAM"
-          InputSchema:
-            RecordColumns:
-             - Name: "MetricType"
-               SqlType: "VARCHAR(16)"
-               Mapping: "$.MetricType"
-             - Name: "time_millisecond"
-               SqlType: "VARCHAR(4)"
-               Mapping: "$.time_millisecond"
-             - Name: "seek_from"
-               SqlType: "DOUBLE"
-               Mapping: "$.seek_from"
-             - Name: "seek_to"
-               SqlType: "DOUBLE"
-               Mapping: "$.seek_to"
-             - Name: "rtt"
-               SqlType: "INTEGER"
-               Mapping: "$.rtt"
-             - Name: "connection_type"
-               SqlType: "VARCHAR(10)"
-               Mapping: "$.connection_type"
-             - Name: "at1"
-               SqlType: "DOUBLE"
-               Mapping: "$.at"
-             - Name: "message"
-               SqlType: "VARCHAR(4)"
-               Mapping: "$.message"
-             - Name: "buffer_type"
-               SqlType: "VARCHAR(16)"
-               Mapping: "$.buffer_type"
-             - Name: "cdn_tracking_id"
-               SqlType: "VARCHAR(64)"
-               Mapping: "$.cdn_tracking_id"
-             - Name: "user_id"
-               SqlType: "VARCHAR(64)"
-               Mapping: "$.user_id"
-             - Name: "video_id"
-               SqlType: "VARCHAR(20)"
-               Mapping: "$.video_id"
-             - Name: "COL_TimeStamp"
-               SqlType: "BIGINT"
-               Mapping: "$.TimeStamp"
-             - Name: "isotimestamp"
-               SqlType: "TIMESTAMP"
-               Mapping: "$.isotimestamp"
-             - Name: "package"
-               SqlType: "VARCHAR(4)"
-               Mapping: "$.package"
-             # - Name: "aspect_ratio"
-             #   SqlType: "VARCHAR(4)"
-               Mapping: "$.aspect_ratio"
-             - Name: "resolution"
-               SqlType: "VARCHAR(8)"
-               Mapping: "$.resolution"
-             - Name: "fps"
-               SqlType: "DOUBLE"
-               Mapping: "$.fps"
-             - Name: "avg_bitrate"
-               SqlType: "INTEGER"
-               Mapping: "$.avg_bitrate"
-            RecordFormat:
-              RecordFormatType: "JSON"
-              MappingParameters:
-                JSONMappingParameters:
-                  RecordRowPath: "$"
-          KinesisFirehoseInput:
-            ResourceARN: !GetAtt PlayerLogsDeliveryStream.Arn
-            RoleARN: !GetAtt KinesisAnalyticsRole.Arn
+  # RealtimeAnalytics:
+  #   Type: AWS::KinesisAnalytics::Application
+  #   DependsOn:
+  #     - KinesisAnalyticsRole
+  #     - PlayerLogsDeliveryStream
+  #   Properties:
+  #     ApplicationName: !Sub '${AWS::StackName}-qos-realtimeapp'
+  #     ApplicationDescription: "QoS Realtime Application"
+  #     ApplicationCode: "-- CURRENT ACTIVE USERS\nCREATE OR REPLACE STREAM ACTIVE_USERS (TYPE VARCHAR(50), USER_COUNT integer);\n\nCREATE OR REPLACE PUMP \"STREAM_PUMP4\" AS INSERT INTO \"ACTIVE_USERS\" \nSELECT STREAM 'ACTIVE_USERS_1MIN', count(DISTINCT \"user_id\") OVER SLIDING_WINDOW AS LAST_2MIN_SLIDING FROM \"SOURCE_SQL_STREAM_001\" \nWHERE \"MetricType\" = 'STREAM' \nWINDOW SLIDING_WINDOW AS\n( PARTITION BY \"MetricType\" RANGE INTERVAL '2' MINUTE PRECEDING);\n\n--TOTAL VIDEO VIEWS IN TUMBLING WINDOW\nCREATE OR REPLACE STREAM AGGREGATE_VIEWS (VIDEOID VARCHAR(20), VIEWS integer);\n\nCREATE OR REPLACE PUMP STREAM_PUMP2 AS \nINSERT INTO AGGREGATE_VIEWS  \nSELECT STREAM \"video_id\", COUNT(1)\n  FROM (\n    SELECT STREAM DISTINCT rowtime as window_time, \n      \"video_id\",\"user_id\",   \n      STEP((SOURCE_SQL_STREAM_001.rowtime) BY INTERVAL '1' MINUTE) \n      FROM SOURCE_SQL_STREAM_001 WHERE \"MetricType\" = 'PLAY') as distinct_stream \n  GROUP BY \"video_id\", \n      STEP((distinct_stream.window_time) BY INTERVAL '1' MINUTE);\n\n--RECENT VIDEO VIEWS IN SLIDING WINDOW\n\nCREATE OR REPLACE STREAM RECENT_VIEWS (VIDEOID VARCHAR(20), VIEWS integer);\n\nCREATE OR REPLACE PUMP \"STREAM_PUMP1\" AS INSERT INTO \"RECENT_VIEWS\" \nSELECT STREAM \"video_id\", count(*) OVER SLIDING_WINDOW FROM \"SOURCE_SQL_STREAM_001\"\nWHERE \"MetricType\" = 'PLAY' \nWINDOW SLIDING_WINDOW AS \n( PARTITION BY \"video_id\" RANGE INTERVAL '2' MINUTE PRECEDING);\n"
+  #     Inputs:
+  #       - NamePrefix: "SOURCE_SQL_STREAM"
+  #         InputSchema:
+  #           RecordColumns:
+  #            - Name: "MetricType"
+  #              SqlType: "VARCHAR(16)"
+  #              Mapping: "$.MetricType"
+  #            - Name: "time_millisecond"
+  #              SqlType: "VARCHAR(4)"
+  #              Mapping: "$.time_millisecond"
+  #            - Name: "seek_from"
+  #              SqlType: "DOUBLE"
+  #              Mapping: "$.seek_from"
+  #            - Name: "seek_to"
+  #              SqlType: "DOUBLE"
+  #              Mapping: "$.seek_to"
+  #            - Name: "rtt"
+  #              SqlType: "INTEGER"
+  #              Mapping: "$.rtt"
+  #            - Name: "connection_type"
+  #              SqlType: "VARCHAR(10)"
+  #              Mapping: "$.connection_type"
+  #            - Name: "at1"
+  #              SqlType: "DOUBLE"
+  #              Mapping: "$.at"
+  #            - Name: "message"
+  #              SqlType: "VARCHAR(4)"
+  #              Mapping: "$.message"
+  #            - Name: "buffer_type"
+  #              SqlType: "VARCHAR(16)"
+  #              Mapping: "$.buffer_type"
+  #            - Name: "cdn_tracking_id"
+  #              SqlType: "VARCHAR(64)"
+  #              Mapping: "$.cdn_tracking_id"
+  #            - Name: "user_id"
+  #              SqlType: "VARCHAR(64)"
+  #              Mapping: "$.user_id"
+  #            - Name: "video_id"
+  #              SqlType: "VARCHAR(20)"
+  #              Mapping: "$.video_id"
+  #            - Name: "COL_TimeStamp"
+  #              SqlType: "BIGINT"
+  #              Mapping: "$.TimeStamp"
+  #            - Name: "isotimestamp"
+  #              SqlType: "TIMESTAMP"
+  #              Mapping: "$.isotimestamp"
+  #            - Name: "package"
+  #              SqlType: "VARCHAR(4)"
+  #              Mapping: "$.package"
+  #            # - Name: "aspect_ratio"
+  #            #   SqlType: "VARCHAR(4)"
+  #              Mapping: "$.aspect_ratio"
+  #            - Name: "resolution"
+  #              SqlType: "VARCHAR(8)"
+  #              Mapping: "$.resolution"
+  #            - Name: "fps"
+  #              SqlType: "DOUBLE"
+  #              Mapping: "$.fps"
+  #            - Name: "avg_bitrate"
+  #              SqlType: "INTEGER"
+  #              Mapping: "$.avg_bitrate"
+  #           RecordFormat:
+  #             RecordFormatType: "JSON"
+  #             MappingParameters:
+  #               JSONMappingParameters:
+  #                 RecordRowPath: "$"
+  #         KinesisFirehoseInput:
+  #           ResourceARN: !GetAtt PlayerLogsDeliveryStream.Arn
+  #           RoleARN: !GetAtt KinesisAnalyticsRole.Arn
   #
   # RealtimeAnalytics:
   #   Type: AWS::KinesisAnalytics::Application

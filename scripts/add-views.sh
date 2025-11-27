@@ -21,8 +21,8 @@ for VIDEO_ID in $VIDEO_IDS; do
         --expression-attribute-values "{\":views\": {\"N\": \"$VIEWS\"}}" \
         --region us-east-1 > /dev/null
     
-    echo "✅ Added $VIEWS views to video $VIDEO_ID"
+    echo "Added $VIEWS views to video $VIDEO_ID"
 done
 
 echo ""
-echo "✅ View counts added to all videos!"
+echo "View counts added to all videos!"

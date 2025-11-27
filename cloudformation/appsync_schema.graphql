@@ -1,39 +1,35 @@
+type Video {
+  id: ID!
+  total_views: Int
+  recent_views: Int
+}
+
 type ActiveUser {
-	id: ID!
-	count: Int!
-}
-
-type Mutation {
-	addVideo(id: ID!, recent_views: Int, total_views: Int): Video!
-	addActiveUser(id: ID!, count: Int!): ActiveUser!
-}
-
-type PaginatedVideos {
-	nextToken: String
-	videos: [Video!]!
+  id: ID!
+  count: Int
 }
 
 type Query {
-	allVideo(count: Int, nextToken: String): PaginatedVideos!
-	getVideo(id: ID!): Video
-	getActiveUser(id: ID!): ActiveUser
+  getVideo(id: ID!): Video
+  listVideos: [Video]
+  getActiveUsers: ActiveUser
+}
+
+type Mutation {
+  addVideo(id: ID!, total_views: Int!, recent_views: Int!): Video
+  updateVideo(id: ID!, total_views: Int, recent_views: Int): Video
+  updateActiveUsers(count: Int!): ActiveUser
 }
 
 type Subscription {
-	newVideo: Video
-		@aws_subscribe(mutations: ["addVideo"])
-	newUser: ActiveUser
-		@aws_subscribe(mutations: ["addActiveUser"])
-}
-
-type Video {
-	id: ID!
-	recent_views: Int
-	total_views: Int
+  onUpdateVideo(id: ID): Video
+    @aws_subscribe(mutations: ["updateVideo", "addVideo"])
+  onUpdateActiveUsers: ActiveUser
+    @aws_subscribe(mutations: ["updateActiveUsers"])
 }
 
 schema {
-	query: Query
-	mutation: Mutation
-	subscription: Subscription
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
 }

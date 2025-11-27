@@ -1,9 +1,9 @@
 #!/bin/bash
 
-echo "íº€ Creating API Gateway..."
+echo "Creating API Gateway..."
 
 # Step 1: Create HTTP API
-echo "1ï¸âƒ£ Creating HTTP API..."
+echo "Creating HTTP API..."
 API_ID=$(aws apigatewayv2 create-api \
     --name mediaqos-uploader-api \
     --protocol-type HTTP \
@@ -13,14 +13,14 @@ API_ID=$(aws apigatewayv2 create-api \
     --output text)
 
 if [ -z "$API_ID" ]; then
-    echo "âŒ Failed to create API"
+    echo "Failed to create API"
     exit 1
 fi
 
-echo "âœ… API Created: $API_ID"
+echo "API Created: $API_ID"
 
 # Step 2: Get Lambda ARN
-echo "2ï¸âƒ£ Getting Lambda function ARN..."
+echo "Getting Lambda function ARN..."
 LAMBDA_ARN=$(aws lambda get-function \
     --function-name mediaqos-uploader \
     --region us-east-1 \
@@ -28,14 +28,14 @@ LAMBDA_ARN=$(aws lambda get-function \
     --output text)
 
 if [ -z "$LAMBDA_ARN" ]; then
-    echo "âŒ Lambda function not found"
+    echo "Lambda function not found"
     exit 1
 fi
 
-echo "âœ… Lambda ARN: $LAMBDA_ARN"
+echo "Lambda ARN: $LAMBDA_ARN"
 
 # Step 3: Create integration
-echo "3ï¸âƒ£ Creating API-Lambda integration..."
+echo "Creating API-Lambda integration..."
 INTEGRATION_ID=$(aws apigatewayv2 create-integration \
     --api-id $API_ID \
     --integration-type AWS_PROXY \
@@ -46,34 +46,34 @@ INTEGRATION_ID=$(aws apigatewayv2 create-integration \
     --output text)
 
 if [ -z "$INTEGRATION_ID" ]; then
-    echo "âŒ Failed to create integration"
+    echo "Failed to create integration"
     exit 1
 fi
 
-echo "âœ… Integration Created: $INTEGRATION_ID"
+echo "Integration Created: $INTEGRATION_ID"
 
 # Step 4: Create route
-echo "4ï¸âƒ£ Creating route..."
+echo "Creating route..."
 aws apigatewayv2 create-route \
     --api-id $API_ID \
     --route-key 'POST /upload' \
     --target integrations/$INTEGRATION_ID \
     --region us-east-1
 
-echo "âœ… Route created: POST /upload"
+echo "Route created: POST /upload"
 
 # Step 5: Create stage (deploy API)
-echo "5ï¸âƒ£ Deploying API..."
+echo "Deploying API..."
 aws apigatewayv2 create-stage \
     --api-id $API_ID \
     --stage-name prod \
     --auto-deploy \
     --region us-east-1
 
-echo "âœ… Stage deployed: prod"
+echo "Stage deployed: prod"
 
 # Step 6: Grant API Gateway permission to invoke Lambda
-echo "6ï¸âƒ£ Granting API Gateway invoke permission..."
+echo "Granting API Gateway invoke permission..."
 aws lambda add-permission \
     --function-name mediaqos-uploader \
     --statement-id apigateway-invoke-$(date +%s) \
@@ -82,21 +82,21 @@ aws lambda add-permission \
     --source-arn "arn:aws:execute-api:us-east-1:418272773708:${API_ID}/*/*" \
     --region us-east-1
 
-echo "âœ… Permission granted"
+echo "Permission granted"
 
 # Step 7: Get API endpoint
 API_ENDPOINT="https://${API_ID}.execute-api.us-east-1.amazonaws.com/prod/upload"
 
 echo ""
-echo "í¾‰ API GATEWAY CREATED SUCCESSFULLY!"
+echo "API GATEWAY CREATED SUCCESSFULLY!"
 echo "=================================================="
-echo "í³ API Endpoint: $API_ENDPOINT"
+echo "API Endpoint: $API_ENDPOINT"
 echo "=================================================="
 echo ""
-echo "í²¾ Saving endpoint to file..."
+echo "Saving endpoint to file..."
 echo $API_ENDPOINT > api-endpoint.txt
 
-echo "âœ… Endpoint saved to api-endpoint.txt"
+echo "Endpoint saved to api-endpoint.txt"
 echo ""
 echo "Test with:"
 echo "curl -X POST $API_ENDPOINT \\"
