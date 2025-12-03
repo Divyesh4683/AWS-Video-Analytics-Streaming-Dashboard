@@ -1,6 +1,6 @@
 // Analytics Dashboard - With Pre-initialized Video Events Section
-const APPSYNC_ENDPOINT = 'https://fls7q7tjf5c7bboecf242zatg4.appsync-api.us-east-1.amazonaws.com/graphql';
-const API_KEY = 'da2-rysgducyh5em7ozsfx6jcu25we';
+const APPSYNC_ENDPOINT = 'https://API_ID.appsync-api.us-east-1.amazonaws.com/graphql';
+const API_KEY = 'API_KEY';
 
 class AnalyticsDashboard {
     constructor() {
