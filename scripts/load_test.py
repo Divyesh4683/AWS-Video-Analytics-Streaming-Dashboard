@@ -14,7 +14,7 @@ from datetime import datetime
 import sys
 
 # Configuration
-API_ENDPOINT = "https://n3r8pu738e.execute-api.us-east-1.amazonaws.com/prod/upload"
+API_ENDPOINT = "https://API_ENDPOINT_ID.execute-api.us-east-1.amazonaws.com/prod/upload"
 BUCKET_NAME = "mediaqos-videos-418272773708"
 REGION = "us-east-1"
 NUM_UPLOADS = 50
