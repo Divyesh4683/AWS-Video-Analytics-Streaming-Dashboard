@@ -51,11 +51,11 @@ class App extends Component {
     }
 }
 
-useEffect(() => {
-  fetch('https://n3r8pu738e.execute-api.us-east-1.amazonaws.com/prod/analytics/popular')
-    .then(res => res.json())
-    .then(data => setPopularVideos(data.popularVideos));
-}, []);
+// useEffect(() => {
+//   fetch('https://n3r8pu738e.execute-api.us-east-1.amazonaws.com/prod/analytics/popular')
+//     .then(res => res.json())
+//     .then(data => setPopularVideos(data.popularVideos));
+// }, []);
 
 const WithProvider = () => (
     <ApolloProvider client={client}>
