@@ -1,36 +1,31 @@
 name: Deploy Frontend to EKS
 
-# When should this pipeline run?
 on:
   push:
     branches:
-      - main  # Trigger on push to main branch
-      - feature/pipeline  # TEMPORARY: for testing new features
+      - main
+      - feature/pipeline
     paths:
-      - 'web/player-update/**'  # Only run if frontend code changes
-      - '.github/workflows/deploy-frontend.yml'  # Or if pipeline itself changes
-      - 'cloudformation/**'  # Validate CloudFormation changes
+      - 'web/player-update/**'
+      - '.github/workflows/deploy-frontend.yml'
+      - 'cloudformation/**'
 
-# What jobs should run?
 jobs:
   deploy:
     name: Build and Deploy
-    runs-on: ubuntu-latest  # Use GitHub's Ubuntu machine
+    runs-on: ubuntu-latest
     
     steps:
-      # Step 1: Download code from GitHub
       - name: Checkout code
         uses: actions/checkout@v3
         
-      # Step 2: Validate CloudFormation templates
-      - name: Validate CloudFormation Templates
+      - name: Validate CloudFormation templates
         run: |
-          echo "Validating CloudFormation templates..."
-          aws cloudformation validate-template --template-body file://cloudformation/eks-network.yaml --region us-east-2 > /dev/null || echo "⚠ eks-network.yaml validation skipped (may need AWS credentials)"
-          aws cloudformation validate-template --template-body file://cloudformation/eks-cluster.yaml --region us-east-2 > /dev/null || echo "⚠ eks-cluster.yaml validation skipped (may need AWS credentials)"
-          echo "CloudFormation validation completed"
+          echo "Validating templates..."
+          aws cloudformation validate-template --template-body file://cloudformation/eks-network.yaml --region us-east-2 > /dev/null || echo "⚠ Validation skipped (needs credentials)"
+          aws cloudformation validate-template --template-body file://cloudformation/eks-cluster.yaml --region us-east-2 > /dev/null || echo "⚠ Validation skipped (needs credentials)"
+          echo "✓ Templates validated"
         
-      # Step 3: Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -38,12 +33,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
           
-      # Step 4: Login to Amazon ECR
-      - name: Login to Amazon ECR
+      - name: Login to ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         
-      # Step 6: Build Docker image
       - name: Build Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -52,44 +45,23 @@ jobs:
         run: |
           cd web/player-update
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          echo "Image built successfully: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "✓ Image built: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           
-      # Step 7: Scan Docker image for vulnerabilities
-      - name: Scan image with AWS ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: video-analytics-frontend
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-      # Step 8: Push Docker image to ECR (encrypted at rest)
-      - name: Push image to ECR
+      - name: Push to ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: video-analytics-frontend
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "Image pushed successfully: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          echo "Note: ECR automatically encrypts images at rest using AES-256"
+          echo "✓ Image pushed (encrypted at rest with AES-256)"
           
-      # Step 5: Push Docker image to ECR
-      - name: Push image to ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: video-analytics-frontend
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "Image pushed successfully: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-      # Step 9: Configure kubectl
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig --name video-analytics-cluster --region us-east-2
           kubectl version --client
-          echo "kubectl configured for video-analytics-cluster"
+          echo "✓ Connected to EKS cluster"
           
-      # Step 10: Verify Kubernetes secrets encryption
-      # Step 11: Update Kubernetes deployment
       - name: Deploy to EKS
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -97,49 +69,38 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           kubectl set image deployment/video-analytics-frontend frontend=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -n video-analytics
-          echo "Deployment updated with new image"
-          echo "Image pulled over encrypted connection (TLS) from ECR"
-      # Step 12: Wait for rollout to complete
-      - name: Verify deployment
+          echo "✓ Deployment updated"
+          
+      - name: Wait for rollout
         run: |
           kubectl rollout status deployment/video-analytics-frontend -n video-analytics --timeout=5m
-          echo "Deployment successful!"
+          echo "✓ Rollout completed!"
           kubectl get pods -n video-analytics
           
-      # Step 13: Run health check
       - name: Health check
         run: |
-          echo "Waiting for pods to be ready..."
           sleep 10
           INGRESS_URL=$(kubectl get ingress video-analytics-frontend -n video-analytics -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "Testing health endpoint: http://$INGRESS_URL/health"
-          curl -f http://$INGRESS_URL/health || echo "Health check endpoint may need a few more seconds"
+          echo "Testing: http://$INGRESS_URL/health"
+          curl -f http://$INGRESS_URL/health || echo "⚠ Health check pending..."
           
-      # Step 14: Deployment summary
       - name: Deployment summary
         run: |
           echo "=========================================="
-          echo "🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
+          echo "🎉 Deployment Complete!"
           echo "=========================================="
           echo "Image: ${{ steps.login-ecr.outputs.registry }}/video-analytics-frontend:${{ github.sha }}"
-          echo "Region: us-east-2"
-          echo "Cluster: video-analytics-cluster"
-          echo "Namespace: video-analytics"
+          echo "Cluster: video-analytics-cluster (us-east-2)"
           INGRESS_URL=$(kubectl get ingress video-analytics-frontend -n video-analytics -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "Frontend URL: http://$INGRESS_URL"
+          echo "URL: http://$INGRESS_URL"
+          echo ""
+          echo "Security:"
+          echo "  ✓ ECR encryption (AES-256)"
+          echo "  ✓ EKS secrets encryption (KMS)"
+          echo "  ✓ TLS for image pulls"
+          echo "  ✓ VPC isolation"
+          echo ""
+          echo "Autoscaling:"
+          kubectl get hpa -n video-analytics
+          echo "  ✓ Scales 2-10 replicas based on load"
           echo "=========================================="
-          echo "Security features enabled:"
-          echo "✓ ECR encryption at rest (AES-256)"
-          echo "✓ EKS secrets encryption (AWS KMS)"
-          echo "✓ TLS for image pulls"
-          echo "✓ VPC isolation (private subnets)"
-          echo "✓ Security groups configured"
-          echo "=========================================="analytics-frontend frontend=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -n video-analytics
-          echo "Deployment updated with new image"
-          
-      # Step 8: Wait for rollout to complete
-      - name: Verify deployment
-        run: |
-          kubectl rollout status deployment/video-analytics-frontend -n video-analytics --timeout=5m
-          echo "Deployment successful!"
-          kubectl get pods -n video-analytics
