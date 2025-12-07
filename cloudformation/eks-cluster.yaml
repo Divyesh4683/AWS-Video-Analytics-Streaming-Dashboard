@@ -1,0 +1,247 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Video Analytics - EKS Cluster with Managed Node Group (imports network from eks-network stack)
+
+Parameters:
+  NetworkStackName:
+    Type: String
+    Default: video-analytics-network
+    Description: Name of the network CloudFormation stack to import VPC/subnet values from
+
+  ClusterName:
+    Type: String
+    Default: video-analytics-cluster
+    Description: Name for the EKS cluster
+
+  KubernetesVersion:
+    Type: String
+    Default: '1.30'
+    AllowedValues:
+      - '1.30'
+      - '1.29'
+    Description: Kubernetes version for EKS cluster
+
+  NodeInstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+    Description: EC2 instance type for worker nodes
+
+  NodeDesiredSize:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 10
+    Description: Desired number of worker nodes
+
+  NodeMinSize:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+    Description: Minimum number of worker nodes
+
+  NodeMaxSize:
+    Type: Number
+    Default: 4
+    MinValue: 1
+    MaxValue: 20
+    Description: Maximum number of worker nodes
+
+Resources:
+  # ==================== IAM ROLES ====================
+  
+  # EKS Cluster IAM Role
+  EKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ClusterName}-cluster-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSVPCResourceController
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-cluster-role'
+
+  # EKS Node IAM Role
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ClusterName}-node-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-node-role'
+
+  # Additional IAM Policy for ECR and CloudWatch
+  NodeAdditionalPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${ClusterName}-node-additional-policy'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+              - ecr:BatchCheckLayerAvailability
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/eks/${ClusterName}/*'
+      Roles:
+        - !Ref NodeInstanceRole
+
+  # ==================== EKS CLUSTER ====================
+  
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref ClusterName
+      Version: !Ref KubernetesVersion
+      RoleArn: !GetAtt EKSClusterRole.Arn
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub '${NetworkStackName}-EKSClusterSecurityGroupId'
+        SubnetIds:
+          - Fn::ImportValue: !Sub '${NetworkStackName}-PublicSubnet1Id'
+          - Fn::ImportValue: !Sub '${NetworkStackName}-PublicSubnet2Id'
+          - Fn::ImportValue: !Sub '${NetworkStackName}-PrivateSubnet1Id'
+          - Fn::ImportValue: !Sub '${NetworkStackName}-PrivateSubnet2Id'
+        EndpointPublicAccess: true
+        EndpointPrivateAccess: true
+        PublicAccessCidrs:
+          - 0.0.0.0/0
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+            - Type: authenticator
+            - Type: controllerManager
+            - Type: scheduler
+      Tags:
+        - Key: Name
+          Value: !Ref ClusterName
+        - Key: Environment
+          Value: Production
+
+  # ==================== EKS NODE GROUP ====================
+  
+  NodeGroup:
+    Type: AWS::EKS::Nodegroup
+    DependsOn: 
+      - EKSCluster
+      - NodeAdditionalPolicy
+    Properties:
+      ClusterName: !Ref ClusterName
+      NodegroupName: !Sub '${ClusterName}-node-group'
+      NodeRole: !GetAtt NodeInstanceRole.Arn
+      Subnets:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-PrivateSubnet1Id'
+        - Fn::ImportValue: !Sub '${NetworkStackName}-PrivateSubnet2Id'
+      ScalingConfig:
+        DesiredSize: !Ref NodeDesiredSize
+        MinSize: !Ref NodeMinSize
+        MaxSize: !Ref NodeMaxSize
+      InstanceTypes:
+        - !Ref NodeInstanceType
+      AmiType: AL2_x86_64
+      DiskSize: 20
+      CapacityType: ON_DEMAND
+      UpdateConfig:
+        MaxUnavailable: 1
+      Labels:
+        role: frontend
+        environment: production
+        workload: video-analytics
+      Tags:
+        Name: !Sub '${ClusterName}-node'
+        Environment: Production
+
+  # ==================== OIDC PROVIDER (for IRSA - IAM Roles for Service Accounts) ====================
+  
+  EKSClusterOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: !GetAtt EKSCluster.OpenIdConnectIssuerUrl
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 9e99a48a9960b14926bb7f3b02e22da2b0ab7280
+
+# ==================== OUTPUTS ====================
+Outputs:
+  ClusterName:
+    Description: EKS Cluster Name
+    Value: !Ref EKSCluster
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterName'
+
+  ClusterArn:
+    Description: EKS Cluster ARN
+    Value: !GetAtt EKSCluster.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterArn'
+
+  ClusterEndpoint:
+    Description: EKS Cluster API Endpoint
+    Value: !GetAtt EKSCluster.Endpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterEndpoint'
+
+  ClusterSecurityGroupId:
+    Description: Security Group ID attached to EKS Cluster
+    Value:
+      Fn::ImportValue: !Sub '${NetworkStackName}-EKSClusterSecurityGroupId'
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterSecurityGroup'
+
+  NodeGroupName:
+    Description: EKS Node Group Name
+    Value: !Ref NodeGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-NodeGroupName'
+
+  NodeInstanceRoleArn:
+    Description: IAM Role ARN for EKS Worker Nodes
+    Value: !GetAtt NodeInstanceRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-NodeRoleArn'
+
+  OIDCProviderArn:
+    Description: OIDC Provider ARN for IRSA (IAM Roles for Service Accounts)
+    Value: !GetAtt EKSClusterOIDCProvider.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-OIDCProviderArn'
+
+  KubeconfigCommand:
+    Description: Command to update kubeconfig for kubectl access
+    Value: !Sub 'aws eks update-kubeconfig --region ${AWS::Region} --name ${ClusterName}'
