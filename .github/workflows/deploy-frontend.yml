@@ -7,7 +7,7 @@ on:
       - main  # Trigger on push to main branch
       - feature/pipeline  # TEMPORARY: for testing workflow
     paths:
-      - 'web/reactplayer/**'  # Only run if frontend code changes
+      - 'web/player-update/**'  # Only run if frontend code changes
       - '.github/workflows/deploy-frontend.yml'  # Or if pipeline itself changes
 
 # What jobs should run?
@@ -27,7 +27,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: us-east-2
           
       # Step 3: Login to Amazon ECR
       - name: Login to Amazon ECR
@@ -41,8 +41,6 @@ jobs:
           ECR_REPOSITORY: video-analytics-frontend
           IMAGE_TAG: ${{ github.sha }}  # Use git commit hash as tag
         run: |
-          cd web/reactplayer
+          cd web/player-update
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          
-      # We'll add more steps here next...
+          echo "Image built successfully: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
