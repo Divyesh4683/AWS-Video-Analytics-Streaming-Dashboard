@@ -1,0 +1,48 @@
+name: Deploy Frontend to EKS
+
+# When should this pipeline run?
+on:
+  push:
+    branches:
+      - main  # Trigger on push to main branch
+      - feature/pipeline  # TEMPORARY: for testing workflow
+    paths:
+      - 'web/reactplayer/**'  # Only run if frontend code changes
+      - '.github/workflows/deploy-frontend.yml'  # Or if pipeline itself changes
+
+# What jobs should run?
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest  # Use GitHub's Ubuntu machine
+    
+    steps:
+      # Step 1: Download code from GitHub
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      # Step 2: Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          
+      # Step 3: Login to Amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+          
+      # Step 4: Build Docker image
+      - name: Build Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: video-analytics-frontend
+          IMAGE_TAG: ${{ github.sha }}  # Use git commit hash as tag
+        run: |
+          cd web/reactplayer
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+      # We'll add more steps here next...
