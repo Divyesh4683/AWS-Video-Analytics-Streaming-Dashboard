@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: 699013266147.dkr.ecr.us-east-1.amazonaws.com/video-analytics-frontend:latest
+        image: 418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:player-update
         ports:
         - containerPort: 80
           name: http

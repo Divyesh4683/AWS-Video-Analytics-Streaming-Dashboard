@@ -272,28 +272,24 @@ Resources:
       SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref PublicRT
 
-  # ==================== NAT GATEWAY (COMMENTED OUT - Saves $32/month) ====================
-  # Uncomment below only when you need to pull images from public registries (Docker Hub, etc.)
-  # NOT needed for: ECR pulls, redeployments, CI/CD, normal operations
-  # Cost when enabled: ~$0.045/hour
-  
-  # NatGateway1EIP:
-  #   Type: AWS::EC2::EIP
-  #   DependsOn: AttachIgw
-  #   Properties:
-  #     Domain: vpc
-  #     Tags:
-  #       - Key: Name
-  #         Value: !Sub ${EnvironmentName}-nat-eip-1
+  # ==================== NAT GATEWAY (TEMPORARILY ENABLED) ====================
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachIgw
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-nat-eip-1
 
-  # NatGateway1:
-  #   Type: AWS::EC2::NatGateway
-  #   Properties:
-  #     AllocationId: !GetAtt NatGateway1EIP.AllocationId
-  #     SubnetId: !Ref PublicSubnet1
-  #     Tags:
-  #       - Key: Name
-  #         Value: !Sub ${EnvironmentName}-nat-gateway-1
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-nat-gateway-1
 
   # ==================== PRIVATE ROUTE TABLES ====================
   PrivateRT1:
@@ -304,12 +300,12 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-private-rt-1
 
-  # PrivateRoute1:
-  #   Type: AWS::EC2::Route
-  #   Properties:
-  #     RouteTableId: !Ref PrivateRT1
-  #     DestinationCidrBlock: 0.0.0.0/0
-  #     NatGatewayId: !Ref NatGateway1
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRT1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
 
   AssocPrivate1:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -325,12 +321,12 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-private-rt-2
 
-  # PrivateRoute2:
-  #   Type: AWS::EC2::Route
-  #   Properties:
-  #     RouteTableId: !Ref PrivateRT2
-  #     DestinationCidrBlock: 0.0.0.0/0
-  #     NatGatewayId: !Ref NatGateway1
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRT2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
 
   AssocPrivate2:
     Type: AWS::EC2::SubnetRouteTableAssociation
