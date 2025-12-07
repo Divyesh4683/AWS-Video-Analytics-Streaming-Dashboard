@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main  # Trigger on push to main branch
-      - feature/pipeline  # TEMPORARY: for testing workflow
     paths:
       - 'web/player-update/**'  # Only run if frontend code changes
       - '.github/workflows/deploy-frontend.yml'  # Or if pipeline itself changes
