@@ -54,3 +54,27 @@ jobs:
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "Image pushed successfully: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          
+      # Step 6: Configure kubectl
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --name video-analytics-cluster --region us-east-2
+          kubectl version --client
+          echo "kubectl configured for video-analytics-cluster"
+          
+      # Step 7: Update Kubernetes deployment
+      - name: Deploy to EKS
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: video-analytics-frontend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          kubectl set image deployment/video-analytics-frontend frontend=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -n video-analytics
+          echo "Deployment updated with new image"
+          
+      # Step 8: Wait for rollout to complete
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/video-analytics-frontend -n video-analytics --timeout=5m
+          echo "Deployment successful!"
+          kubectl get pods -n video-analytics
