@@ -70,14 +70,12 @@ jobs:
           SHORT_SHA: ${{ github.sha }}
         run: |
           cd web/player-update
-          # Build with multiple tags for traceability
+          # Build with multiple tags for traceability (no 'latest' due to ECR immutability)
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION \
-                       -t $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA \
-                       -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+                       -t $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA .
           echo "✓ Image built with tags:"
-          echo "  - $VERSION"
-          echo "  - $SHORT_SHA"
-          echo "  - latest"
+          echo "  - $VERSION (primary)"
+          echo "  - $SHORT_SHA (git commit)"
       
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -108,15 +106,14 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           SHORT_SHA: ${{ github.sha }}
         run: |
-          # Push all tags
+          # Push version and SHA tags (ECR immutability prevents 'latest' tag reuse)
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "✓ Images pushed with multiple tags:"
-          echo "  - $VERSION"
-          echo "  - $SHORT_SHA"
-          echo "  - latest"
+          echo "✓ Images pushed with tags:"
+          echo "  - $VERSION (primary version)"
+          echo "  - $SHORT_SHA (git traceability)"
           echo "✓ All images encrypted at rest with AES-256"
+          echo "✓ ECR tag immutability: enabled (prevents tag overwriting)"
           
       - name: Configure kubectl
         run: |

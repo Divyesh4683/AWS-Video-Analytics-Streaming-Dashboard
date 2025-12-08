@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stress-test
+  namespace: video-analytics
+spec:
+  replicas: 15
+  selector:
+    matchLabels:
+      app: stress-test
+  template:
+    metadata:
+      labels:
+        app: stress-test
+    spec:
+      containers:
+      - name: stress
+        image: polinux/stress
+        command:
+        - stress
+        - --cpu
+        - "1"
+        - --timeout
+        - "600s"
+        resources:
+          requests:
+            cpu: 400m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
