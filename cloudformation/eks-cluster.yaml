@@ -119,6 +119,36 @@ Resources:
       Roles:
         - !Ref NodeInstanceRole
 
+  # IAM Policy for Cluster Autoscaler
+  ClusterAutoscalerPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${ClusterName}-autoscaler-policy'
+      Roles:
+        - !Ref NodeInstanceRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - autoscaling:DescribeAutoScalingGroups
+              - autoscaling:DescribeAutoScalingInstances
+              - autoscaling:DescribeLaunchConfigurations
+              - autoscaling:DescribeScalingActivities
+              - autoscaling:DescribeTags
+              - ec2:DescribeInstanceTypes
+              - ec2:DescribeLaunchTemplateVersions
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - autoscaling:SetDesiredCapacity
+              - autoscaling:TerminateInstanceInAutoScalingGroup
+            Resource: '*'
+            Condition:
+              StringEquals:
+                autoscaling:ResourceTag/k8s.io/cluster-autoscaler/enabled: 'true'
+                autoscaling:ResourceTag/k8s.io/cluster-autoscaler/${ClusterName}: 'owned'
+
   # IAM Role for AWS Load Balancer Controller Service Account
   AWSLoadBalancerControllerRole:
     Type: AWS::IAM::Role
@@ -349,6 +379,8 @@ Resources:
       Tags:
         Name: !Sub '${ClusterName}-node'
         Environment: Production
+        k8s.io/cluster-autoscaler/enabled: 'true'
+        k8s.io/cluster-autoscaler/video-analytics-cluster: 'owned'
 
   # ==================== OIDC PROVIDER (for IRSA - IAM Roles for Service Accounts) ====================
   
