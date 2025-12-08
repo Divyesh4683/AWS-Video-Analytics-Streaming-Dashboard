@@ -1,5 +1,5 @@
 // analytics-integration.js
-const ANALYTICS_API = 'https://ANALYTICS_API_ID.execute-api.us-east-1.amazonaws.com/prod/analytics';
+const ANALYTICS_API = '/api/analytics';
 
 async function loadAnalytics() {
     try {
