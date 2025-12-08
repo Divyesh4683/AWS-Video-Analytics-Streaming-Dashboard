@@ -1,0 +1,319 @@
+---
+# =============================================================================
+# OPTIMIZED RBAC Configuration for Video Analytics Application
+# Uses efficient patterns: templates, shared configs, minimal repetition
+# =============================================================================
+
+# =============================================================================
+# SHARED SERVICE ACCOUNTS (for application pods across all namespaces)
+# =============================================================================
+
+# These service accounts are used by application pods, not humans
+# They have minimal read-only permissions
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-service-account
+  namespace: dev
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-service-account
+  namespace: staging
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-service-account
+  namespace: prod
+
+# =============================================================================
+# SHARED APP ROLE (minimal permissions for running apps)
+# Pattern: Define once, bind in each namespace
+# =============================================================================
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-role
+  namespace: dev
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-role
+  namespace: staging
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-role
+  namespace: prod
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "configmaps"]
+    verbs: ["get", "list", "watch"]
+
+# Bind app role to app service accounts
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-rolebinding
+  namespace: dev
+subjects:
+  - kind: ServiceAccount
+    name: app-service-account
+roleRef:
+  kind: Role
+  name: app-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-rolebinding
+  namespace: staging
+subjects:
+  - kind: ServiceAccount
+    name: app-service-account
+roleRef:
+  kind: Role
+  name: app-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-rolebinding
+  namespace: prod
+subjects:
+  - kind: ServiceAccount
+    name: app-service-account
+roleRef:
+  kind: Role
+  name: app-role
+  apiGroup: rbac.authorization.k8s.io
+
+# =============================================================================
+# ENVIRONMENT-SPECIFIC HUMAN ROLES
+# =============================================================================
+
+# -------------------------
+# DEV: Full access for developers
+# -------------------------
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: developer
+  namespace: dev
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer-role
+  namespace: dev
+rules:
+  - apiGroups: ["", "apps", "networking.k8s.io", "autoscaling", "batch"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-rolebinding
+  namespace: dev
+subjects:
+  - kind: ServiceAccount
+    name: developer
+roleRef:
+  kind: Role
+  name: developer-role
+  apiGroup: rbac.authorization.k8s.io
+
+# -------------------------
+# STAGING: Deployer (CI/CD) + QA Tester
+# -------------------------
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: staging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployer-role
+  namespace: staging
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "pods", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer-rolebinding
+  namespace: staging
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+roleRef:
+  kind: Role
+  name: deployer-role
+  apiGroup: rbac.authorization.k8s.io
+
+# QA Tester: Read + scale for testing
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: qa-tester
+  namespace: staging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: qa-tester-role
+  namespace: staging
+rules:
+  - apiGroups: ["", "apps", "networking.k8s.io", "autoscaling"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec", "pods/portforward"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: qa-tester-rolebinding
+  namespace: staging
+subjects:
+  - kind: ServiceAccount
+    name: qa-tester
+roleRef:
+  kind: Role
+  name: qa-tester-role
+  apiGroup: rbac.authorization.k8s.io
+
+# -------------------------
+# PROD: Read-only operator + Limited deployer
+# -------------------------
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: operator
+  namespace: prod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: operator-role
+  namespace: prod
+rules:
+  - apiGroups: ["", "apps", "networking.k8s.io", "autoscaling"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec", "pods/portforward", "pods/log"]
+    verbs: ["create", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: operator-rolebinding
+  namespace: prod
+subjects:
+  - kind: ServiceAccount
+    name: operator
+roleRef:
+  kind: Role
+  name: operator-role
+  apiGroup: rbac.authorization.k8s.io
+
+# Production Deployer: Update only (CI/CD)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prod-deployer
+  namespace: prod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prod-deployer-role
+  namespace: prod
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps", "pods", "pods/log", "services"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prod-deployer-rolebinding
+  namespace: prod
+subjects:
+  - kind: ServiceAccount
+    name: prod-deployer
+roleRef:
+  kind: Role
+  name: prod-deployer-role
+  apiGroup: rbac.authorization.k8s.io
+
+# =============================================================================
+# OPTIONAL: Cluster-wide read-only viewer
+# =============================================================================
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-viewer
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces", "persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+
+# =============================================================================
+# USAGE NOTES:
+# 
+# 1. Apply this file: kubectl apply -f rbac.yaml
+# 
+# 2. Generate token for human users:
+#    kubectl create token developer -n dev --duration=8h
+#    kubectl create token qa-tester -n staging --duration=4h
+#    kubectl create token operator -n prod --duration=2h
+# 
+# 3. Use app-service-account in your deployments:
+#    spec:
+#      serviceAccountName: app-service-account
+# 
+# 4. For CI/CD pipelines, use deployer or prod-deployer service accounts
+# =============================================================================

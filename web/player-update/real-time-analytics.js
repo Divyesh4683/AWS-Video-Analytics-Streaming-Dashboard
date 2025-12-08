@@ -2,8 +2,8 @@
 (function() {
     'use strict';
     
-    const APPSYNC_ENDPOINT = 'https://fls7q7tjf5c7bboecf242zatg4.appsync-api.us-east-1.amazonaws.com/graphql';
-    const API_KEY = 'da2-rysgducyh5em7ozsfx6jcu25we';
+    const APPSYNC_ENDPOINT = '/api/graphql';
+    const API_KEY = ''; // API key now handled by backend proxy
     
     console.log('\n========================================');
     console.log('REAL-TIME ANALYTICS WITH EVENTS');
@@ -110,8 +110,7 @@
             const response = await fetch(APPSYNC_ENDPOINT, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': API_KEY
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ query: mutation })
             });
@@ -177,7 +176,7 @@
                 const mutation = `mutation { updateActiveUsers(count: ${current + 1}) { count } }`;
                 await fetch(APPSYNC_ENDPOINT, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query: mutation })
                 });
                 this.registered = true;
@@ -201,7 +200,7 @@
                 const query = `query { getActiveUsers { count } }`;
                 const res = await fetch(APPSYNC_ENDPOINT, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query })
                 });
                 const data = await res.json();

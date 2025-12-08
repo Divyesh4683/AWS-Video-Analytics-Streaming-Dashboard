@@ -1,0 +1,40 @@
+---
+# Development Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dev
+  labels:
+    name: dev
+    environment: development
+    project: video-analytics
+---
+# Staging Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    name: staging
+    environment: staging
+    project: video-analytics
+---
+# Production Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod
+  labels:
+    name: prod
+    environment: production
+    project: video-analytics
+---
+# Existing video-analytics namespace (kept for compatibility)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: video-analytics
+  labels:
+    name: video-analytics
+    environment: production
+    project: video-analytics

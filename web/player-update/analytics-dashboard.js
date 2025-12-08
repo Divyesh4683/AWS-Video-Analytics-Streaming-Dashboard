@@ -1,6 +1,6 @@
 // Analytics Dashboard - With Pre-initialized Video Events Section
-const APPSYNC_ENDPOINT = 'https://fls7q7tjf5c7bboecf242zatg4.appsync-api.us-east-1.amazonaws.com/graphql';
-const API_KEY = 'da2-rysgducyh5em7ozsfx6jcu25we';
+const APPSYNC_ENDPOINT = '/api/graphql';
+const API_KEY = ''; // API key now handled by backend proxy
 
 class AnalyticsDashboard {
     constructor() {
@@ -15,8 +15,7 @@ class AnalyticsDashboard {
                     fetch(APPSYNC_ENDPOINT, {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json',
-                            'x-api-key': API_KEY
+                            'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
                             query: `query { getVideo(id: "${id}") { id total_views recent_views } }`
