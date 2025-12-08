@@ -382,6 +382,40 @@ Resources:
         k8s.io/cluster-autoscaler/enabled: 'true'
         k8s.io/cluster-autoscaler/video-analytics-cluster: 'owned'
 
+  # Second Node Group - For system/backend workloads
+  NodeGroupSystem:
+    Type: AWS::EKS::Nodegroup
+    DependsOn: 
+      - EKSCluster
+      - NodeAdditionalPolicy
+    Properties:
+      ClusterName: !Ref ClusterName
+      NodegroupName: !Sub '${ClusterName}-system-node-group'
+      NodeRole: !GetAtt NodeInstanceRole.Arn
+      Subnets:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-PrivateSubnet1Id'
+        - Fn::ImportValue: !Sub '${NetworkStackName}-PrivateSubnet2Id'
+      ScalingConfig:
+        DesiredSize: 1
+        MinSize: 1
+        MaxSize: 3
+      InstanceTypes:
+        - t3.small
+      AmiType: AL2_x86_64
+      DiskSize: 20
+      CapacityType: ON_DEMAND
+      UpdateConfig:
+        MaxUnavailable: 1
+      Labels:
+        role: system
+        environment: production
+        workload: monitoring
+      Tags:
+        Name: !Sub '${ClusterName}-system-node'
+        Environment: Production
+        k8s.io/cluster-autoscaler/enabled: 'true'
+        k8s.io/cluster-autoscaler/video-analytics-cluster: 'owned'
+
   # ==================== OIDC PROVIDER (for IRSA - IAM Roles for Service Accounts) ====================
   
   EKSClusterOIDCProvider:
@@ -421,10 +455,16 @@ Outputs:
       Name: !Sub '${AWS::StackName}-ClusterSecurityGroup'
 
   NodeGroupName:
-    Description: EKS Node Group Name
+    Description: EKS Node Group Name (Frontend)
     Value: !Ref NodeGroup
     Export:
       Name: !Sub '${AWS::StackName}-NodeGroupName'
+
+  NodeGroupSystemName:
+    Description: EKS System Node Group Name
+    Value: !Ref NodeGroupSystem
+    Export:
+      Name: !Sub '${AWS::StackName}-NodeGroupSystemName'
 
   NodeInstanceRoleArn:
     Description: IAM Role ARN for EKS Worker Nodes

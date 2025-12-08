@@ -1,0 +1,129 @@
+---
+# 1. Default deny all ingress traffic in video-analytics namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: video-analytics
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# 2. Allow frontend to receive traffic from ALB/Ingress Controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-from-alb
+  namespace: video-analytics
+spec:
+  podSelector:
+    matchLabels:
+      app: video-analytics-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow from ALB Controller in kube-system
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aws-load-balancer-controller
+      ports:
+        - protocol: TCP
+          port: 80
+    # Allow from within same namespace (for service mesh)
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 80
+
+---
+# 3. Deny cross-namespace traffic in dev
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+  namespace: dev
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only allow traffic from same namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: dev
+
+---
+# 4. Deny cross-namespace traffic in staging
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+  namespace: staging
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only allow traffic from same namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: staging
+
+---
+# 5. Deny cross-namespace traffic in prod
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+  namespace: prod
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only allow traffic from same namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: prod
+
+---
+# 6. Allow DNS queries to kube-dns from all namespaces
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: video-analytics
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow all egress to internet (for API calls)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+    - to:
+        - podSelector: {}
