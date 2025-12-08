@@ -3,7 +3,7 @@ name: Deploy Frontend to EKS
 on:
   push:
     branches:
-      - feature/pipeline
+      - main
     paths:
       - 'web/player-update/**'
       - 'kubernetes/**'
