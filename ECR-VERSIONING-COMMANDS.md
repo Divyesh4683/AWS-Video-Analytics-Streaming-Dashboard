@@ -6,11 +6,11 @@
 # 1. Ensure working directory is clean
 git status
 
-# 2. Create semantic version tag
-git tag -a v1.0.0 -m "Initial production release with ECR versioning"
+# 2. Create version tag
+git tag -a v1-video-analytics -m "Initial production release with ECR versioning"
 
 # 3. Push tag (triggers GitHub Actions)
-git push origin v1.0.0
+git push origin v1-video-analytics
 
 # 4. Watch deployment
 # Go to: https://github.com/Divyesh4683/AWS-Video-Analytics-Streaming-Dashboard/actions
@@ -28,7 +28,7 @@ aws ecr list-images --repository-name video-analytics-frontend --region us-east-
 aws ecr describe-images --repository-name video-analytics-frontend --region us-east-2 --query 'imageDetails[*].[imageTags[0],imagePushedAt,imageSizeInBytes]' --output table
 
 # Check specific version
-aws ecr describe-images --repository-name video-analytics-frontend --region us-east-2 --image-ids imageTag=v1.0.0
+aws ecr describe-images --repository-name video-analytics-frontend --region us-east-2 --image-ids imageTag=v1-video-analytics
 ```
 
 ---
@@ -66,8 +66,8 @@ kubectl get pods -n video-analytics -o jsonpath='{range .items[*]}{.metadata.nam
 ## 🔄 **Rollback to Previous Version**
 
 ```powershell
-# Rollback to v1.0.0
-kubectl set image deployment/video-analytics-frontend video-analytics-frontend=418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:v1.0.0 -n video-analytics
+# Rollback to v1-video-analytics
+kubectl set image deployment/video-analytics-frontend video-analytics-frontend=418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:v1-video-analytics -n video-analytics
 
 # Verify rollout
 kubectl rollout status deployment/video-analytics-frontend -n video-analytics
@@ -93,21 +93,21 @@ aws ecr batch-delete-image --repository-name video-analytics-frontend --region u
 ## 🏷️ **Tagging Best Practices**
 
 ```powershell
-# Feature release (backward compatible)
-git tag v1.1.0 -m "Added video upload progress indicator"
-git push origin v1.1.0
+# Initial release
+git tag v1-video-analytics -m "Initial production release"
+git push origin v1-video-analytics
 
-# Bug fix
-git tag v1.0.1 -m "Fixed nginx connection timeout"
-git push origin v1.0.1
+# Major update
+git tag v2-video-analytics -m "Added new analytics features"
+git push origin v2-video-analytics
 
-# Breaking change
-git tag v2.0.0 -m "Changed API response format (breaking)"
-git push origin v2.0.0
+# Next version
+git tag v3-video-analytics -m "Performance improvements and UI updates"
+git push origin v3-video-analytics
 
-# Pre-release (testing)
-git tag v1.2.0-beta.1 -m "Beta release for testing"
-git push origin v1.2.0-beta.1
+# For bug fixes, use development builds instead:
+git commit -m "Fixed nginx connection timeout"
+git push  # Creates dev-YYYYMMDD-sha tag automatically
 ```
 
 ---
@@ -133,7 +133,7 @@ kubectl describe deployment video-analytics-frontend -n video-analytics | Select
 ## 🎓 **For Your Professor**
 
 **What changed:**
-- ✅ Semantic versioning (v1.0.0, v1.1.0, etc.)
+- ✅ Custom versioning (v1-video-analytics, v2-video-analytics, etc.)
 - ✅ Multi-tag strategy (version + SHA + latest)
 - ✅ Automated tag generation in CI/CD
 - ✅ ECR lifecycle policy for cleanup
@@ -147,4 +147,4 @@ kubectl describe deployment video-analytics-frontend -n video-analytics | Select
 
 ---
 
-**Next Step:** Run the first command to create v1.0.0 tag! 🚀
+**Next Step:** Run the first command to create v1-video-analytics tag! 🚀

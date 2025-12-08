@@ -7,9 +7,10 @@ Every image build creates **3 tags** for maximum traceability:
 
 ```
 418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:
-  ├── v1.2.3           (semantic version - production releases)
-  ├── dev-20251208-6e81d6e  (dev builds with timestamp + short SHA)
-  └── latest           (always points to most recent build)
+  ├── v1-video-analytics     (production release version 1)
+  ├── v2-video-analytics     (production release version 2)
+  ├── dev-20251208-6e81d6e   (dev builds with timestamp + short SHA)
+  └── latest                 (always points to most recent build)
 ```
 
 ---
@@ -17,14 +18,14 @@ Every image build creates **3 tags** for maximum traceability:
 ## 🎯 **Versioning Behavior**
 
 ### **Production Releases (Git Tags)**
-When you create a git tag with semantic version:
+When you create a git tag with your naming convention:
 ```bash
-git tag v1.2.3
-git push origin v1.2.3
+git tag v1-video-analytics
+git push origin v1-video-analytics
 ```
 
 **Resulting ECR tags:**
-- `v1.2.3` - Semantic version from tag
+- `v1-video-analytics` - Production release version 1
 - `6e81d6eee78f5a3b9c4d2e1f0a7b8c9d` - Git SHA (full traceability)
 - `latest` - Points to this build
 
@@ -50,7 +51,7 @@ git push
   id: version
   run: |
     if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-      VERSION="${GITHUB_REF#refs/tags/v}"
+      VERSION="${GITHUB_REF#refs/tags/}"
       echo "version=$VERSION" >> $GITHUB_OUTPUT
       echo "is_release=true" >> $GITHUB_OUTPUT
     else
@@ -139,7 +140,7 @@ aws ecr list-images \
 aws ecr describe-images \
   --repository-name video-analytics-frontend \
   --region us-east-2 \
-  --image-ids imageTag=v1.2.3
+  --image-ids imageTag=v1-video-analytics
 ```
 
 ### **Delete Old Development Tags** (Keep last 10)
@@ -171,7 +172,7 @@ aws ecr batch-delete-image \
 ```bash
 # Rollback to specific version
 kubectl set image deployment/video-analytics-frontend \
-  video-analytics-frontend=418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:v1.2.2 \
+  video-analytics-frontend=418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:v1-video-analytics \
   -n video-analytics
 ```
 
@@ -180,11 +181,11 @@ kubectl set image deployment/video-analytics-frontend \
 # Dev: Use timestamp tags
 image: 418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:dev-20251208-6e81d6e
 
-# Staging: Use release candidates
-image: 418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:v1.3.0-rc1
+# Staging: Test before production
+image: 418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:v2-video-analytics
 
 # Production: Use stable versions
-image: 418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:v1.2.3
+image: 418272773708.dkr.ecr.us-east-2.amazonaws.com/video-analytics-frontend:v1-video-analytics
 ```
 
 ### **4. Compliance & Audit**
@@ -202,27 +203,27 @@ git status
 git log --oneline -5
 ```
 
-### **Step 2: Create semantic version tag**
+### **Step 2: Create version tag**
 ```bash
-git tag -a v1.0.0 -m "Initial production release"
+git tag -a v1-video-analytics -m "Initial production release"
 ```
 
 ### **Step 3: Push tag to trigger CI/CD**
 ```bash
-git push origin v1.0.0
+git push origin v1-video-analytics
 ```
 
 ### **Step 4: Monitor GitHub Actions**
 - Go to **Actions** tab
 - Watch `Deploy to EKS` workflow
-- Verify image is built with tags: `v1.0.0`, `6e81d6e...`, `latest`
+- Verify image is built with tags: `v1-video-analytics`, `6e81d6e...`, `latest`
 
 ### **Step 5: Verify in ECR**
 ```bash
 aws ecr describe-images \
   --repository-name video-analytics-frontend \
   --region us-east-2 \
-  --image-ids imageTag=v1.0.0
+  --image-ids imageTag=v1-video-analytics
 ```
 
 ### **Step 6: Confirm deployment**
@@ -236,26 +237,26 @@ kubectl describe deployment video-analytics-frontend -n video-analytics | grep I
 
 | Scenario | Git Action | ECR Tags Generated |
 |----------|-----------|-------------------|
-| Production release | `git tag v1.2.3` | `v1.2.3`, `6e81d6e...`, `latest` |
-| Hotfix | `git tag v1.2.4` | `v1.2.4`, `abc1234...`, `latest` |
+| Initial release | `git tag v1-video-analytics` | `v1-video-analytics`, `6e81d6e...`, `latest` |
+| Major update | `git tag v2-video-analytics` | `v2-video-analytics`, `abc1234...`, `latest` |
 | Feature branch commit | `git push` | `dev-20251208-def5678`, `def5678...`, `latest` |
-| Pre-release | `git tag v2.0.0-beta.1` | `v2.0.0-beta.1`, `ghi9012...`, `latest` |
+| Next version | `git tag v3-video-analytics` | `v3-video-analytics`, `ghi9012...`, `latest` |
 
 ---
 
 ## ⚠️ **Best Practices**
 
 ### **DO:**
-✅ Use semantic versions for production releases  
+✅ Use v1-video-analytics, v2-video-analytics, etc. for production releases  
 ✅ Keep `latest` tag pointing to most recent stable build  
-✅ Document breaking changes in CHANGELOG.md  
+✅ Document major changes in CHANGELOG.md  
 ✅ Test images in dev/staging before tagging for production  
 ✅ Clean up old dev tags periodically (keep last 10-20)
 
 ### **DON'T:**
 ❌ Don't use `latest` in production deployments (use specific versions)  
-❌ Don't reuse version tags (create new patch version instead)  
-❌ Don't skip versions in sequence (v1.2.3 → v1.2.5)  
+❌ Don't reuse version tags (create new version number instead)  
+❌ Don't skip versions in sequence (v1 → v3, use v2)  
 ❌ Don't delete production version tags from ECR  
 
 ---
@@ -282,7 +283,7 @@ Create lifecycle policy to auto-cleanup old dev images:
     },
     {
       "rulePriority": 2,
-      "description": "Keep all semantic version tags",
+      "description": "Keep all production version tags (v*-video-analytics)",
       "selection": {
         "tagStatus": "tagged",
         "tagPrefixList": ["v"],

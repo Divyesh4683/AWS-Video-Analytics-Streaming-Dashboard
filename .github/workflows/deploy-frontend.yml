@@ -50,9 +50,9 @@ jobs:
       - name: Generate version tags
         id: version
         run: |
-          # Extract semantic version from git tag (e.g., v1.2.3) or use timestamp
+          # Extract version from git tag (e.g., v1-video-analytics) or use timestamp
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
+            VERSION="${GITHUB_REF#refs/tags/}"
             echo "version=$VERSION" >> $GITHUB_OUTPUT
             echo "is_release=true" >> $GITHUB_OUTPUT
           else
