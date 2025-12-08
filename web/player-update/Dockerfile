@@ -1,5 +1,16 @@
-# Nginx image to serve static files
-FROM nginx:1.25-alpine
+# Nginx image to serve static files - using latest stable version
+FROM nginx:1.27-alpine
+
+# Update Alpine packages to patch known vulnerabilities
+RUN apk update && \
+    apk upgrade --no-cache && \
+    apk add --no-cache \
+        libxml2 \
+        libxslt \
+        libexpat \
+        openssl \
+        curl && \
+    rm -rf /var/cache/apk/*
 
 # Copy all static files from player-update to nginx html directory
 COPY . /usr/share/nginx/html/
