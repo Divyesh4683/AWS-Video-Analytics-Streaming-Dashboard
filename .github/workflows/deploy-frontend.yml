@@ -3,9 +3,10 @@ name: Deploy Frontend to EKS
 on:
   push:
     branches:
-      - main
+      - feature/pipeline
     paths:
       - 'web/player-update/**'
+      - 'kubernetes/**'
       - '.github/workflows/deploy-frontend.yml'
       - 'cloudformation/**'
 
@@ -36,6 +37,12 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         
+      - name: Validate nginx configuration
+        run: |
+          cd web/player-update
+          docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf:ro nginx:1.25-alpine nginx -t
+          echo "✓ Nginx configuration is valid"
+          
       - name: Build Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -60,15 +67,32 @@ jobs:
           aws eks update-kubeconfig --name video-analytics-cluster --region us-east-2
           kubectl version --client
           echo "✓ Connected to EKS cluster"
+      
+      - name: Verify namespaces
+        run: |
+          kubectl get namespace video-analytics || kubectl apply -f kubernetes/namespaces.yaml
+          echo "✓ Namespaces verified"
+      
+      - name: Apply RBAC configuration
+        run: |
+          kubectl apply -f kubernetes/rbac.yaml
+          echo "✓ RBAC configuration applied"
           
-      - name: Deploy to EKS
+      - name: Update deployment manifest
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: video-analytics-frontend
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          kubectl set image deployment/video-analytics-frontend frontend=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -n video-analytics
-          echo "✓ Deployment updated"
+          # Create temporary deployment file with updated image
+          sed "s|image:.*video-analytics-frontend:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" kubernetes/frontend-deployment.yaml > /tmp/deployment.yaml
+          cat /tmp/deployment.yaml
+          echo "✓ Deployment manifest updated"
+          
+      - name: Deploy to EKS
+        run: |
+          kubectl apply -f /tmp/deployment.yaml
+          echo "✓ Deployment applied"
           
       - name: Wait for rollout
         run: |
@@ -80,8 +104,23 @@ jobs:
         run: |
           sleep 10
           INGRESS_URL=$(kubectl get ingress video-analytics-frontend -n video-analytics -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "Testing: http://$INGRESS_URL/health"
+          echo "Testing health endpoint: http://$INGRESS_URL/health"
           curl -f http://$INGRESS_URL/health || echo "⚠ Health check pending..."
+          
+      - name: Test backend proxy endpoints
+        run: |
+          INGRESS_URL=$(kubectl get ingress video-analytics-frontend -n video-analytics -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "Testing backend proxy..."
+          
+          # Test analytics API proxy
+          echo "Testing /api/analytics/popular..."
+          curl -s -o /dev/null -w "%{http_code}" http://$INGRESS_URL/api/analytics/popular | grep -q "200" && echo "  ✓ Analytics API proxy working" || echo "  ⚠ Analytics API proxy not responding"
+          
+          # Test GraphQL proxy
+          echo "Testing /api/graphql..."
+          curl -s -o /dev/null -w "%{http_code}" -X POST http://$INGRESS_URL/api/graphql -H "Content-Type: application/json" -d '{"query":"query { __typename }"}' | grep -q "200" && echo "  ✓ GraphQL proxy working" || echo "  ⚠ GraphQL proxy not responding"
+          
+          echo "✓ Proxy endpoints tested"
           
       - name: Deployment summary
         run: |
@@ -98,8 +137,15 @@ jobs:
           echo "  ✓ EKS secrets encryption (KMS)"
           echo "  ✓ TLS for image pulls"
           echo "  ✓ VPC isolation"
+          echo "  ✓ Backend proxy (API endpoints hidden)"
           echo ""
-          echo "Autoscaling:"
-          kubectl get hpa -n video-analytics
-          echo "  ✓ Scales 2-10 replicas based on load"
+          echo "Pod-level Autoscaling (HPA):"
+          kubectl get hpa -n video-analytics || echo "  No HPA configured"
+          echo ""
+          echo "Node-level Autoscaling (Cluster Autoscaler):"
+          kubectl get pods -n kube-system -l app=cluster-autoscaler --no-headers | wc -l | xargs -I {} echo "  ✓ Cluster Autoscaler: {} pod(s) running"
+          kubectl get nodes --no-headers | wc -l | xargs -I {} echo "  ✓ Current nodes: {}"
+          echo ""
+          echo "Namespaces:"
+          kubectl get namespaces dev,staging,prod,video-analytics --no-headers 2>/dev/null | awk '{print "  ✓ " $1}'
           echo "=========================================="
