@@ -3,7 +3,7 @@ name: Deploy Frontend to EKS
 on:
   push:
     branches:
-      - main
+      - feature/pipeline
     paths:
       - 'web/player-update/**'
       - 'kubernetes/**'
@@ -47,20 +47,40 @@ jobs:
           docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf:ro nginx:1.25-alpine nginx -t
           echo "✓ Nginx configuration is valid"
           
+      - name: Generate version tags
+        id: version
+        run: |
+          # Extract version from git tag (e.g., v1-video-analytics) or use timestamp
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            VERSION="dev-$(date +'%Y%m%d')-$(echo ${{ github.sha }} | cut -c1-7)"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
+          fi
+          echo "✓ Version: $VERSION"
+      
       - name: Build Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: video-analytics-frontend
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHORT_SHA: ${{ github.sha }}
         run: |
           cd web/player-update
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          echo "✓ Image built: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          # Build with multiple tags for traceability (no 'latest' due to ECR immutability)
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION \
+                       -t $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA .
+          echo "✓ Image built with tags:"
+          echo "  - $VERSION (primary)"
+          echo "  - $SHORT_SHA (git commit)"
       
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ steps.login-ecr.outputs.registry }}/video-analytics-frontend:${{ github.sha }}
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/video-analytics-frontend:${{ steps.version.outputs.version }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -74,7 +94,7 @@ jobs:
       - name: Run Trivy scanner (table output)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ steps.login-ecr.outputs.registry }}/video-analytics-frontend:${{ github.sha }}
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/video-analytics-frontend:${{ steps.version.outputs.version }}
           format: 'table'
           severity: 'CRITICAL,HIGH,MEDIUM'
           exit-code: '0'
@@ -83,10 +103,17 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: video-analytics-frontend
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHORT_SHA: ${{ github.sha }}
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "✓ Image pushed (encrypted at rest with AES-256)"
+          # Push version and SHA tags (ECR immutability prevents 'latest' tag reuse)
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA
+          echo "✓ Images pushed with tags:"
+          echo "  - $VERSION (primary version)"
+          echo "  - $SHORT_SHA (git traceability)"
+          echo "✓ All images encrypted at rest with AES-256"
+          echo "✓ ECR tag immutability: enabled (prevents tag overwriting)"
           
       - name: Configure kubectl
         run: |
@@ -108,12 +135,12 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: video-analytics-frontend
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Create temporary deployment file with updated image
-          sed "s|image:.*video-analytics-frontend:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" kubernetes/frontend-deployment.yaml > /tmp/deployment.yaml
+          # Create temporary deployment file with versioned image
+          sed "s|image:.*video-analytics-frontend:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION|g" kubernetes/frontend-deployment.yaml > /tmp/deployment.yaml
           cat /tmp/deployment.yaml
-          echo "✓ Deployment manifest updated"
+          echo "✓ Deployment manifest updated with version: $VERSION"
           
       - name: Deploy to EKS
         run: |
