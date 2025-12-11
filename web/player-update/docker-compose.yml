@@ -1,40 +1,16 @@
-version: '3.8'
-
 services:
-  # Video Analytics Frontend
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
-    image: video-analytics-frontend:latest
+    image: video-analytics-frontend:local
     container_name: video-analytics-frontend
     ports:
       - "8080:80"
     environment:
-      # Backend API endpoints (proxied through nginx)
       - ANALYTICS_API_URL=${ANALYTICS_API_URL:-https://your-api-id.execute-api.us-east-2.amazonaws.com}
       - APPSYNC_ENDPOINT=${APPSYNC_ENDPOINT:-https://your-appsync-id.appsync-api.us-east-2.amazonaws.com/graphql}
-      - APPSYNC_API_KEY=${APPSYNC_API_KEY}
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     restart: unless-stopped
-    networks:
-      - video-analytics-network
     labels:
       com.example.description: "Video Analytics Frontend - React SPA with nginx"
       com.example.version: "1.0"
-
-networks:
-  video-analytics-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-
-volumes:
-  frontend-cache:
-    driver: local
